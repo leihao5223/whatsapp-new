@@ -3,7 +3,7 @@
 }
 
 :root {
-  --ui-scale: 0.6;
+  --ui-scale: 0.85;
   color: #122033;
   background: #eef3f8;
   font-family:
@@ -17,7 +17,7 @@
 
 body {
   margin: 0;
-  min-width: calc(1200px * var(--ui-scale));
+  min-width: 1200px;
   min-height: 100vh;
   background:
     radial-gradient(circle at 22% 12%, rgba(20, 184, 166, 0.12), transparent 28%),
@@ -42,17 +42,14 @@ button:disabled {
 .console-shell {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
-  width: calc(100% / var(--ui-scale));
+  width: 100%;
   min-height: 100vh;
-  zoom: var(--ui-scale);
+  font-size: calc(1rem * var(--ui-scale));
 }
 
-@supports not (zoom: 1) {
-  .console-shell {
-    min-height: calc(100vh / var(--ui-scale));
-    transform: scale(var(--ui-scale));
-    transform-origin: top left;
-  }
+.console-shell svg {
+  transform: scale(var(--ui-scale));
+  transform-origin: center;
 }
 
 .sidebar {
