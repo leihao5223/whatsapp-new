@@ -25,6 +25,18 @@ npm run dev
 npm run build
 ```
 
+## 云端开发环境
+
+仓库包含 `.devcontainer/devcontainer.json` 和 `scripts/setup-cloud-env.sh`，用于 Cursor Cloud/Dev Container 预安装依赖并复用 npm 缓存。
+
+```bash
+npm run setup:cloud
+npm run lint
+npm run build
+```
+
+`setup:cloud` 会执行 `npm ci --cache .npm-cache --prefer-offline`，把 npm 下载缓存保存在仓库工作区的 `.npm-cache/` 中，后续环境启动可复用锁文件安装结果。
+
 ## 接入真实搜索服务
 
 前端已预留接口模式。创建 `.env` 并配置：
