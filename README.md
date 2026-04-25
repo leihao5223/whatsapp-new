@@ -25,6 +25,17 @@ npm run dev
 npm run build
 ```
 
+## Vercel 部署
+
+仓库包含 `vercel.json`，用于明确 Vercel 的 Vite 部署参数：
+
+- Install Command: `npm ci`
+- Build Command: `npm run build`
+- Output Directory: `dist`
+- SPA fallback: 所有路径回退到 `/index.html`
+
+如果 Vercel 项目仍提示 404，请在 Vercel 项目设置中确认 Root Directory 指向仓库根目录，并重新触发一次部署。
+
 ## 云端开发环境
 
 仓库包含 `.devcontainer/devcontainer.json` 和 `scripts/setup-cloud-env.sh`，用于 Cursor Cloud/Dev Container 预安装依赖并复用 npm 缓存。
