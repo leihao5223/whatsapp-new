@@ -753,46 +753,80 @@ th {
   box-shadow: 0 0 0 6px rgba(93, 255, 176, 0.14), 0 0 18px rgba(93, 255, 176, 0.74);
 }
 
-.qq-login-stage {
+.qq-portrait-shell {
   display: grid;
   place-items: center;
-  min-height: 430px;
-  padding: 42px;
-  color: #dffff8;
-  text-align: center;
+  min-height: 560px;
+  padding: 28px;
   background-image:
     linear-gradient(rgba(125, 255, 231, 0.06) 1px, transparent 1px),
     linear-gradient(90deg, rgba(125, 255, 231, 0.06) 1px, transparent 1px);
   background-size: 30px 30px;
 }
 
-.qq-login-stage svg {
-  color: #5eead4;
-  filter: drop-shadow(0 12px 24px rgba(94, 234, 212, 0.28));
+.qq-app-window {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(100%, 360px);
+  min-height: 510px;
+  overflow: hidden;
+  border: 1px solid rgba(222, 255, 249, 0.18);
+  border-radius: 34px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(94, 234, 212, 0.25), transparent 32%),
+    linear-gradient(180deg, rgba(7, 48, 55, 0.98), rgba(3, 25, 32, 0.98));
+  box-shadow:
+    0 34px 80px rgba(0, 0, 0, 0.26),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
-.qq-login-stage h3 {
-  margin: 16px 0 8px;
+.qq-app-header {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  padding: 26px 20px 18px;
+  color: #7fffe7;
+  border-bottom: 1px solid rgba(222, 255, 249, 0.1);
+}
+
+.qq-app-header span {
+  color: rgba(222, 255, 249, 0.74);
+  font-size: 0.8rem;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+}
+
+.qq-app-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 24px 32px;
+  color: #dffff8;
+  text-align: center;
+}
+
+.qq-app-body h3 {
+  margin: 0 0 10px;
   color: #ffffff;
-  font-size: 1.45rem;
+  font-size: 1.22rem;
 }
 
-.qq-login-stage p {
-  max-width: 620px;
-  margin: 0 0 22px;
-  color: rgba(222, 255, 249, 0.7);
-  line-height: 1.75;
+.qq-app-body p {
+  margin: 0 0 24px;
+  color: rgba(222, 255, 249, 0.68);
+  font-size: 0.86rem;
+  line-height: 1.72;
 }
 
 .qq-login-form {
   display: grid;
-  grid-template-columns: minmax(0, 180px) minmax(0, 180px) auto;
-  gap: 10px;
-  width: min(100%, 620px);
-  padding: 12px;
+  gap: 11px;
+  width: 100%;
+  padding: 14px;
   border: 1px solid rgba(222, 255, 249, 0.14);
-  border-radius: 18px;
-  background: rgba(1, 32, 34, 0.42);
+  border-radius: 20px;
+  background: rgba(1, 32, 34, 0.46);
 }
 
 .qq-login-form input {
@@ -807,6 +841,24 @@ th {
 
 .qq-login-form input::placeholder {
   color: rgba(222, 255, 249, 0.44);
+}
+
+.login-feedback {
+  width: 100%;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  border-radius: 14px;
+  color: #fde68a;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  background: rgba(120, 53, 15, 0.25);
+}
+
+.login-feedback--success {
+  border-color: rgba(93, 255, 176, 0.34);
+  color: #bbf7d0;
+  background: rgba(6, 95, 70, 0.26);
 }
 
 .qq-expanded__side {

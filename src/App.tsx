@@ -21,7 +21,7 @@ import {
   UploadCloud,
   XCircle,
 } from 'lucide-react';
-import { type ChangeEvent, type ReactNode, useMemo, useRef, useState } from 'react';
+import { type ChangeEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import './styles.css';
 
 type PageKey = 'dashboard' | 'data' | 'accounts' | 'runner' | 'settings';
@@ -384,13 +384,13 @@ function App() {
     );
   };
 
-  const simulateLogin = (id: string) => {
+  const simulateLogin = (id: string, account: string) => {
     setPorts((current) =>
       current.map((port) =>
         port.id === id
           ? {
               ...port,
-              account: `${port.name.replace(/\s/g, '')}@qq`,
+              account: account || `${port.name.replace(/\s/g, '')}@qq`,
               accountStatus: 'normal',
               status: 'ready',
             }
@@ -718,9 +718,33 @@ function AccountPage({
   ports: EmulatorPort[];
   selectedPortId?: string;
   selectPort: (id: string) => void;
-  simulateLogin: (id: string) => void;
+  simulateLogin: (id: string, account: string) => void;
 }) {
   const activePort = ports.find((port) => port.id === selectedPortId) ?? ports[0];
+  const [loginAccount, setLoginAccount] = useState(activePort?.accountStatus === 'normal' ? activePort.account ?? '' : '');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginMessage, setLoginMessage] = useState('');
+
+  useEffect(() => {
+    setLoginAccount(activePort?.accountStatus === 'normal' ? activePort.account ?? '' : '');
+    setLoginPassword('');
+    setLoginMessage('');
+  }, [activePort?.account, activePort?.accountStatus, activePort?.id]);
+
+  const handlePortLogin = () => {
+    if (!activePort) {
+      return;
+    }
+
+    const nextAccount = loginAccount.trim();
+    if (!nextAccount || !loginPassword.trim()) {
+      setLoginMessage('请输入 QQ 账号和密码后再登录。');
+      return;
+    }
+
+    simulateLogin(activePort.id, nextAccount);
+    setLoginMessage(`${nextAccount} 已完成登录校验，端口状态已切换为正常。`);
+  };
 
   return (
     <div className="account-layout">
@@ -754,18 +778,41 @@ function AccountPage({
               <strong>{activePort.name}</strong>
               <small>127.0.0.1:{activePort.port}</small>
             </div>
-            <div className="qq-login-stage">
-              <Monitor size={58} />
-              <h3>QQ 客户端登录现场</h3>
-              <p>
-                这里承载真实 QQ 端口窗口。接入桌面 bridge 后，用户可在该区域输入账号密码并完成登录；缩小后回到底部静默卡片。
-              </p>
-              <div className="qq-login-form">
-                <input placeholder="QQ 账号" defaultValue={activePort.accountStatus === 'normal' ? activePort.account : ''} />
-                <input placeholder="QQ 密码" type="password" />
-                <button className="run-button" onClick={() => simulateLogin(activePort.id)} type="button">
-                  登录并校验
-                </button>
+            <div className="qq-portrait-shell">
+              <div className="qq-app-window">
+                <div className="qq-app-header">
+                  <Monitor size={30} />
+                  <span>QQ</span>
+                </div>
+                <div className="qq-app-body">
+                  <h3>QQ 客户端登录现场</h3>
+                  <p>这里展示纵向真实 QQ 应用窗口。接入桌面 bridge 后，会把官方 QQ 登录画面映射到该区域。</p>
+                  <div className="qq-login-form">
+                    <input
+                      onChange={(event) => setLoginAccount(event.target.value)}
+                      placeholder="QQ 账号"
+                      value={loginAccount}
+                    />
+                    <input
+                      onChange={(event) => setLoginPassword(event.target.value)}
+                      placeholder="QQ 密码"
+                      type="password"
+                      value={loginPassword}
+                    />
+                    <button className="run-button" onClick={handlePortLogin} type="button">
+                      登录并校验
+                    </button>
+                  </div>
+                  {loginMessage ? (
+                    <div
+                      className={`login-feedback ${
+                        activePort.accountStatus === 'normal' ? 'login-feedback--success' : 'login-feedback--warning'
+                      }`}
+                    >
+                      {loginMessage}
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </div>
           </div>
