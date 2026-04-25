@@ -130,6 +130,42 @@ const bridgeSearch = async (query, worker) => {
 const runWorkerSearch = (query, worker, config) =>
   worker.mode === 'bridge' ? bridgeSearch(query, worker) : simulatorSearch(query, worker, config.delayMs);
 
+const loginWorker = async ({ account, password, portId, portName, portNumber }) => {
+  if (!account || !password || !portId) {
+    return {
+      success: false,
+      error: 'Missing account, password, or portId',
+    };
+  }
+
+  const worker = config.workers.find((item) => item.id === portId) ?? config.workers[0];
+  if (worker?.mode === 'bridge' && worker.bridgeUrl) {
+    const loginUrl = new URL(worker.bridgeUrl);
+    loginUrl.pathname = loginUrl.pathname.replace(/\/search\/?$/, '/login');
+    if (!loginUrl.pathname.endsWith('/login')) {
+      loginUrl.pathname = `${loginUrl.pathname.replace(/\/$/, '')}/login`;
+    }
+
+    const response = await fetch(loginUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ account, password, portId, portName, portNumber, workerId: worker.id }),
+    });
+
+    return response.json();
+  }
+
+  await sleep(config.delayMs);
+  return {
+    success: true,
+    account,
+    workerId: worker?.id ?? portId,
+    message: `${portName ?? portId} 已通过托管 QQ Runtime 模拟完成自动登录。`,
+  };
+};
+
 class RoundRobinQueue {
   activeCount = 0;
   cursor = 0;
@@ -214,6 +250,20 @@ const server = createServer(async (req, res) => {
 
       const result = await queue.enqueue(query);
       sendJson(res, 200, result);
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/login') {
+      const body = JSON.parse((await readBody(req)) || '{}');
+      const result = await loginWorker({
+        account: typeof body.account === 'string' ? body.account.trim() : '',
+        password: typeof body.password === 'string' ? body.password : '',
+        portId: typeof body.portId === 'string' ? body.portId : '',
+        portName: typeof body.portName === 'string' ? body.portName : '',
+        portNumber: typeof body.portNumber === 'number' ? body.portNumber : undefined,
+      });
+
+      sendJson(res, result.success ? 200 : 400, result);
       return;
     }
 

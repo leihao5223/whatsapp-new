@@ -51,13 +51,18 @@ npm run build
 
 `setup:cloud` 会执行 `npm ci --cache .npm-cache --prefer-offline`，把 npm 下载缓存保存在仓库工作区的 `.npm-cache/` 中，后续环境启动可复用锁文件安装结果。
 
-## 接入真实 QQ 搜索
+## 内置 QQ Runtime 架构
 
-浏览器/Vercel 不能直接下载、登录或操控官方 QQ 桌面客户端。真实 QQ 搜索需要在一台可运行 QQ 的本地机器上完成：
+商用版本不应依赖客户本地电脑安装 QQ。推荐把 QQ 运行环境部署在你们自有服务器上，作为托管 QQ Runtime：
 
-1. 人工安装官方 QQ 应用并登录一个或多个 QQ 账号。
-2. 启动本项目的本地 QQ Runner。
-3. Vercel `/api/search` 转发任务到本地 Runner，Runner 再平均分发给多个 QQ worker。
+1. 托管 Runtime 内置安卓模拟器/安卓容器，并安装官方安卓版 QQ。
+2. 每个端口对应一个独立安卓 QQ 容器实例，账号数据互相隔离。
+3. 前端账号管理页提交账号密码到 `/api/ports/login`。
+4. Vercel API 转发到 `QQ_RUNNER_ENDPOINT` 对应的 Runtime `/login` 接口。
+5. Runtime 在指定端口内自动填充账号密码、完成 QQ 登录和状态校验。
+6. 搜索任务通过 `/api/search` 转发到 Runtime `/search`，再分发到已登录端口。
+
+PC QQ 多开更依赖桌面会话和窗口管理，不适合云端商用托管。安卓 QQ 容器更适合做端口复制、账号隔离、自动化登录和横向扩容。
 
 ### 账号管理与端口设计
 
@@ -70,11 +75,11 @@ npm run build
 - 点击下方端口缩略卡片后，上方会纵向展开该端口的 QQ 登录现场；缩小时只保留静默端口卡片。
 - 端口右上角提示灯代表账号状态：绿灯为账号正常，红灯为账号异常。
 - 异常端口会在端口卡片和展开面板内提示是否初始化，初始化会清空账号现场但保留模拟器程序。
-- Runner 会把待检测数据按轮询方式分发到多个端口，避免单个账号承担全部任务。
+- Runtime 会把待检测数据按轮询方式分发到多个端口，避免单个账号承担全部任务。
 
-当前仓库先实现前端端口管理状态和本地 Runner 分发协议；真实“下载 QQ / 复制模拟器 / 清理账号态”需要在本地桌面 Runner 或运维脚本里对接具体模拟器软件能力。
+当前仓库已实现前端端口管理、登录 API、搜索 API 和 Runtime 协议；真实“安装 QQ / 复制容器 / 清理账号态 / 自动登录”需要在托管安卓 Runtime 服务里对接具体模拟器或容器能力。
 
-### 本地启动多账号 Runner
+### 开发模式启动 Runtime 模拟器
 
 先复制环境变量模板：
 
@@ -82,19 +87,20 @@ npm run build
 cp .env.example .env
 ```
 
-默认 simulator 模式可先验证多账号分发链路：
+默认 simulator 模式可先验证多端口分发和登录链路：
 
 ```bash
 QQ_RUNNER_WORKERS=qq-a,qq-b,qq-c npm run runner:qq
 ```
 
-Runner 会启动：
+Runtime 模拟器会启动：
 
 ```bash
 http://127.0.0.1:8787/search
+http://127.0.0.1:8787/login
 ```
 
-它接受：
+搜索接口接受：
 
 ```json
 {
@@ -115,17 +121,27 @@ http://127.0.0.1:8787/search
 }
 ```
 
-### 接入真实 QQ 客户端
+登录接口接受：
 
-真实模式请把桌面自动化或官方 QQ 搜索能力封装成本地 bridge 服务，然后配置：
+```json
+{
+  "portId": "port-1",
+  "account": "1011234791",
+  "password": "your-password"
+}
+```
+
+### 接入真实安卓 QQ Runtime
+
+真实模式请把安卓 QQ 自动化能力封装成 Runtime 服务，然后配置：
 
 ```bash
-QQ_BRIDGE_URLS=http://127.0.0.1:8899/search,http://127.0.0.1:8898/search
+QQ_BRIDGE_URLS=https://runtime.example.com/ports/1/search,https://runtime.example.com/ports/2/search
 QQ_RUNNER_CONCURRENCY=2
 npm run runner:qq
 ```
 
-bridge 服务建议接受：
+Runtime bridge 搜索接口建议接受：
 
 ```json
 {
@@ -134,17 +150,28 @@ bridge 服务建议接受：
 }
 ```
 
-然后返回上面的标准 JSON 结构。这样可以让多个 QQ 账号窗口并发工作，并由 Runner 做轮询分发、节流和错误隔离。
+Runtime bridge 登录接口建议接受：
 
-### Vercel 转发到 Runner
+```json
+{
+  "portId": "port-1",
+  "account": "1011234791",
+  "password": "your-password",
+  "workerId": "qq-1"
+}
+```
 
-如果 Runner 暴露了公网 HTTPS 地址，在 Vercel Project Settings -> Environment Variables 配置：
+然后返回 `{ "success": true, "account": "1011234791" }`。这样可以让多个 QQ 账号容器并发工作，并由 Runtime 做轮询分发、节流和错误隔离。
+
+### Vercel 转发到托管 Runtime
+
+如果 Runtime 暴露了公网 HTTPS 地址，在 Vercel Project Settings -> Environment Variables 配置：
 
 ```bash
 QQ_RUNNER_ENDPOINT=https://your-runner.example.com/search
 ```
 
-`/api/search` 会优先转发到 `QQ_RUNNER_ENDPOINT`。如果你已有其他 QQ 搜索服务，也可继续使用：
+`/api/search` 会优先转发到 `QQ_RUNNER_ENDPOINT`，`/api/ports/login` 会自动转发到同域 `/login`。如果你已有其他 QQ 搜索服务，也可继续使用：
 
 ```bash
 QQ_SEARCH_ENDPOINT=https://your-qq-search-service.example/search

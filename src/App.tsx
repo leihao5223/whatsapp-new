@@ -75,6 +75,7 @@ const categoryTone: Record<SearchResult['category'], string> = {
 const demoLines = ['QQ: 19888990001', 'wxid_alpha_2949', '13800138000', 'market-data-node', 'unknown-empty-case'];
 const demoMode = import.meta.env.VITE_QE_DEMO_MODE === 'true';
 const searchEndpoint = (import.meta.env.VITE_QE_SEARCH_ENDPOINT as string | undefined) || '/api/search';
+const portLoginEndpoint = (import.meta.env.VITE_QE_PORT_LOGIN_ENDPOINT as string | undefined) || '/api/ports/login';
 
 const initialPorts: EmulatorPort[] = [
   {
@@ -128,7 +129,7 @@ const createMockResult = async (query: string): Promise<SearchResult | null> => 
     category,
     source: 'QE模拟引擎',
     confidence,
-    summary: `已根据输入 "${query}" 生成标准化线索；真实运行时由本地 QQ Runner 分发到各端口校验。`,
+    summary: `已根据输入 "${query}" 生成标准化线索；真实运行时由托管 QQ Runtime 分发到各端口校验。`,
     tags: [query.includes('@') ? '邮箱' : '文本', /\d{6,}/.test(query) ? '数字账号' : '关键词', '自动整理'],
   };
 };
@@ -139,6 +140,46 @@ const normalizeCategory = (category?: string): SearchResult['category'] => {
   }
 
   return '待复核';
+};
+
+const loginPortAccount = async (port: EmulatorPort, account: string, password: string) => {
+  if (demoMode) {
+    await delay(480);
+    return {
+      account,
+      message: '演示模式已模拟完成端口登录。',
+    };
+  }
+
+  const response = await fetch(portLoginEndpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      account,
+      password,
+      portId: port.id,
+      portName: port.name,
+      portNumber: port.port,
+    }),
+  });
+
+  const data = (await response.json().catch(() => ({}))) as {
+    success?: boolean;
+    account?: string;
+    message?: string;
+    error?: string;
+  };
+
+  if (!response.ok || data.success === false) {
+    throw new Error(data.error ?? data.message ?? `端口登录失败：${response.status}`);
+  }
+
+  return {
+    account: data.account ?? account,
+    message: data.message ?? '托管 QQ Runtime 已完成自动登录校验。',
+  };
 };
 
 const searchQuery = async (query: string): Promise<SearchResult | null> => {
@@ -188,7 +229,7 @@ const searchQuery = async (query: string): Promise<SearchResult | null> => {
     category: normalizeCategory(data.category),
     source: data.source ?? 'QQ搜索框',
     confidence: Math.max(0, Math.min(100, Math.round(data.confidence ?? data.score ?? 72))),
-    summary: data.summary ?? '接口已返回结果，请在 Runner bridge 中补充摘要字段以提升整理质量。',
+    summary: data.summary ?? '接口已返回结果，请在托管 QQ Runtime 中补充摘要字段以提升整理质量。',
     tags: data.tags?.length ? data.tags : ['QQ搜索', '接口返回'],
   };
 };
@@ -384,7 +425,7 @@ function App() {
     );
   };
 
-  const simulateLogin = (id: string, account: string) => {
+  const markPortLoggedIn = (id: string, account: string) => {
     setPorts((current) =>
       current.map((port) =>
         port.id === id
@@ -429,7 +470,7 @@ function App() {
             ports={ports}
             selectedPortId={selectedPortId}
             selectPort={setSelectedPortId}
-            simulateLogin={simulateLogin}
+            markPortLoggedIn={markPortLoggedIn}
           />
         );
       case 'runner':
@@ -692,7 +733,7 @@ function DataPage({
         </div>
 
         <div className="connector-note">
-          默认调用 /api/search；Vercel 可转发到本地 QQ Runner，实现多端口并发校验。
+          默认调用 /api/search；Vercel 转发到托管 QQ Runtime，实现多端口并发校验。
         </div>
 
         <ResultTable resultRows={resultRows} />
@@ -709,7 +750,7 @@ function AccountPage({
   ports,
   selectedPortId,
   selectPort,
-  simulateLogin,
+  markPortLoggedIn,
 }: {
   addPort: () => void;
   clonePort: (port: EmulatorPort) => void;
@@ -718,7 +759,7 @@ function AccountPage({
   ports: EmulatorPort[];
   selectedPortId?: string;
   selectPort: (id: string) => void;
-  simulateLogin: (id: string, account: string) => void;
+  markPortLoggedIn: (id: string, account: string) => void;
 }) {
   const activePort = ports.find((port) => port.id === selectedPortId) ?? ports[0];
   const [loginAccount, setLoginAccount] = useState(activePort?.accountStatus === 'normal' ? activePort.account ?? '' : '');
@@ -731,7 +772,7 @@ function AccountPage({
     setLoginMessage('');
   }, [activePort?.account, activePort?.accountStatus, activePort?.id]);
 
-  const handlePortLogin = () => {
+  const handlePortLogin = async () => {
     if (!activePort) {
       return;
     }
@@ -742,8 +783,15 @@ function AccountPage({
       return;
     }
 
-    simulateLogin(activePort.id, nextAccount);
-    setLoginMessage(`${nextAccount} 已完成登录校验，端口状态已切换为正常。`);
+    setLoginMessage('正在请求托管 QQ Runtime 自动登录...');
+
+    try {
+      const result = await loginPortAccount(activePort, nextAccount, loginPassword);
+      markPortLoggedIn(activePort.id, result.account);
+      setLoginMessage(result.message);
+    } catch (error) {
+      setLoginMessage(error instanceof Error ? error.message : '托管 QQ Runtime 登录失败。');
+    }
   };
 
   return (
@@ -786,7 +834,7 @@ function AccountPage({
                 </div>
                 <div className="qq-app-body">
                   <h3>QQ 客户端登录现场</h3>
-                  <p>这里展示纵向真实 QQ 应用窗口。接入桌面 bridge 后，会把官方 QQ 登录画面映射到该区域。</p>
+                  <p>这里展示纵向真实 QQ 应用窗口。商用部署时由托管安卓 QQ Runtime 执行自动登录并回传状态。</p>
                   <div className="qq-login-form">
                     <input
                       onChange={(event) => setLoginAccount(event.target.value)}
@@ -938,14 +986,14 @@ function SettingsPage() {
         <div className="panel__header compact">
           <div>
             <p className="section-kicker">API 配置</p>
-            <h2>前端、Vercel 与本地 Runner 连接方式</h2>
+            <h2>前端、Vercel 与托管 QQ Runtime 连接方式</h2>
           </div>
           <Settings className="panel-icon" />
         </div>
         <div className="config-list">
           <ConfigRow label="前端搜索地址" value="VITE_QE_SEARCH_ENDPOINT=/api/search" />
           <ConfigRow label="Vercel 转发 Runner" value="QQ_RUNNER_ENDPOINT=https://your-runner.example.com/search" />
-          <ConfigRow label="本地 Runner" value="npm run runner:qq -> http://127.0.0.1:8787/search" />
+          <ConfigRow label="托管 QQ Runtime" value="QQ_RUNNER_ENDPOINT=https://runtime.your-domain.com/search" />
           <ConfigRow label="真实 QQ Bridge" value="QQ_BRIDGE_URLS=http://127.0.0.1:9876/search,..." />
         </div>
       </section>
