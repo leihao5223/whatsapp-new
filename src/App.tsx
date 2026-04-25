@@ -796,14 +796,7 @@ function AccountPage({
 
   return (
     <div className="account-layout">
-      <section className="panel account-toolbar">
-        <div>
-          <p className="section-kicker">账号管理 / 端口管理</p>
-          <h2>每个端口就是一个 QQ 模拟器现场</h2>
-          <p className="muted-copy">
-            上方设定端口规则，中间展开当前端口的 QQ 登录现场；下方端口以静默缩略卡片排列。
-          </p>
-        </div>
+      <section className="account-toolbar account-toolbar--minimal">
         <div className="account-actions">
           <button className="run-button" onClick={addPort} type="button">
             <Plus size={17} />
@@ -819,16 +812,12 @@ function AccountPage({
       </section>
 
       {activePort ? (
-        <section className="panel qq-expanded">
+        <section className="qq-expanded">
           <div className="qq-expanded__device">
-            <div className="qq-titlebar">
-              <span className={`account-light account-light--${activePort.accountStatus}`} />
-              <strong>{activePort.name}</strong>
-              <small>127.0.0.1:{activePort.port}</small>
-            </div>
             <div className="qq-portrait-shell">
               <div className="qq-app-window">
                 <div className="qq-app-header">
+                  <span className={`account-light account-light--${activePort.accountStatus}`} />
                   <Monitor size={30} />
                   <span>QQ</span>
                 </div>
@@ -861,30 +850,18 @@ function AccountPage({
                     </div>
                   ) : null}
                 </div>
+                <div className="qq-app-footer">
+                  <span>账号：{activePort.accountStatus === 'normal' ? activePort.account : '未登录 / 异常'}</span>
+                  <strong>{activePort.name}</strong>
+                  <span>端口：127.0.0.1:{activePort.port}</span>
+                  {activePort.accountStatus === 'abnormal' ? (
+                    <button onClick={() => initializePort(activePort.id)} type="button">
+                      初始化
+                    </button>
+                  ) : null}
+                </div>
               </div>
             </div>
-          </div>
-
-          <div className="qq-expanded__side">
-            <p className="section-kicker">当前端口状态</p>
-            <h2>{activePort.accountStatus === 'normal' ? '账号正常' : '账号异常'}</h2>
-            <div className="status-panel">
-              <span>QQ 安装</span>
-              <strong>{activePort.qqInstalled ? '已安装' : '待下载'}</strong>
-              <span>账号状态</span>
-              <strong>{activePort.accountStatus === 'normal' ? activePort.account : '未登录 / 异常'}</strong>
-              <span>生成方式</span>
-              <strong>{activePort.source === 'base-download' ? '首个端口下载 QQ' : '复制模拟器'}</strong>
-            </div>
-            {activePort.accountStatus === 'abnormal' ? (
-              <div className="abnormal-box">
-                <strong>检测到账号异常</strong>
-                <span>是否初始化该端口？初始化会保留模拟器程序，但清空账号现场。</span>
-                <button className="soft-button danger" onClick={() => initializePort(activePort.id)} type="button">
-                  初始化端口
-                </button>
-              </div>
-            ) : null}
           </div>
         </section>
       ) : (
