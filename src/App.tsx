@@ -27,6 +27,7 @@ import './styles.css';
 type PageKey = 'dashboard' | 'data' | 'accounts' | 'runner' | 'settings';
 type QueryStatus = 'pending' | 'running' | 'matched' | 'empty' | 'failed';
 type PortStatus = 'ready' | 'booting' | 'offline';
+type AccountStatus = 'normal' | 'abnormal';
 
 type QueryItem = {
   id: string;
@@ -59,6 +60,7 @@ type EmulatorPort = {
   name: string;
   port: number;
   status: PortStatus;
+  accountStatus: AccountStatus;
   qqInstalled: boolean;
   account?: string;
   source: 'base-download' | 'cloned';
@@ -80,6 +82,7 @@ const initialPorts: EmulatorPort[] = [
     name: 'QQ端口 01',
     port: 8787,
     status: 'ready',
+    accountStatus: 'abnormal',
     qqInstalled: true,
     account: '未登录',
     source: 'base-download',
@@ -215,6 +218,7 @@ function App() {
   const [isRunning, setIsRunning] = useState(false);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [ports, setPorts] = useState<EmulatorPort[]>(initialPorts);
+  const [selectedPortId, setSelectedPortId] = useState<string | undefined>(initialPorts[0]?.id);
   const stopRequested = useRef(false);
 
   const stats: SearchStats = useMemo(
@@ -331,12 +335,14 @@ function App() {
       name: `QQ端口 ${String(ports.length + 1).padStart(2, '0')}`,
       port: nextPortNumber,
       status: 'booting',
+      accountStatus: 'abnormal',
       qqInstalled: true,
       account: '未登录',
       source: isFirstPort ? 'base-download' : 'cloned',
     };
 
     setPorts((current) => [...current, port]);
+    setSelectedPortId(port.id);
     window.setTimeout(() => {
       setPorts((current) =>
         current.map((currentPort) => (currentPort.id === port.id ? { ...currentPort, status: 'ready' } : currentPort)),
@@ -350,12 +356,14 @@ function App() {
       name: `QQ端口 ${String(ports.length + 1).padStart(2, '0')}`,
       port: nextPortNumber,
       status: 'booting',
+      accountStatus: 'abnormal',
       qqInstalled: sourcePort.qqInstalled,
       account: '未登录',
       source: 'cloned',
     };
 
     setPorts((current) => [...current, port]);
+    setSelectedPortId(port.id);
     window.setTimeout(() => {
       setPorts((current) =>
         current.map((currentPort) => (currentPort.id === port.id ? { ...currentPort, status: 'ready' } : currentPort)),
@@ -365,6 +373,30 @@ function App() {
 
   const deletePort = (id: string) => {
     setPorts((current) => current.filter((port) => port.id !== id));
+    setSelectedPortId((current) => (current === id ? ports.find((port) => port.id !== id)?.id : current));
+  };
+
+  const initializePort = (id: string) => {
+    setPorts((current) =>
+      current.map((port) =>
+        port.id === id ? { ...port, account: '未登录', accountStatus: 'abnormal', status: 'ready' } : port,
+      ),
+    );
+  };
+
+  const simulateLogin = (id: string) => {
+    setPorts((current) =>
+      current.map((port) =>
+        port.id === id
+          ? {
+              ...port,
+              account: `${port.name.replace(/\s/g, '')}@qq`,
+              accountStatus: 'normal',
+              status: 'ready',
+            }
+          : port,
+      ),
+    );
   };
 
   const renderPage = () => {
@@ -388,7 +420,18 @@ function App() {
           />
         );
       case 'accounts':
-        return <AccountPage addPort={addPort} clonePort={clonePort} deletePort={deletePort} ports={ports} />;
+        return (
+          <AccountPage
+            addPort={addPort}
+            clonePort={clonePort}
+            deletePort={deletePort}
+            initializePort={initializePort}
+            ports={ports}
+            selectedPortId={selectedPortId}
+            selectPort={setSelectedPortId}
+            simulateLogin={simulateLogin}
+          />
+        );
       case 'runner':
         return <RunnerPage onlinePorts={onlinePorts} ports={ports} stats={stats} />;
       case 'settings':
@@ -662,76 +705,148 @@ function AccountPage({
   addPort,
   clonePort,
   deletePort,
+  initializePort,
   ports,
+  selectedPortId,
+  selectPort,
+  simulateLogin,
 }: {
   addPort: () => void;
   clonePort: (port: EmulatorPort) => void;
   deletePort: (id: string) => void;
+  initializePort: (id: string) => void;
   ports: EmulatorPort[];
+  selectedPortId?: string;
+  selectPort: (id: string) => void;
+  simulateLogin: (id: string) => void;
 }) {
+  const activePort = ports.find((port) => port.id === selectedPortId) ?? ports[0];
+
   return (
-    <div className="page-stack">
+    <div className="account-layout">
       <section className="panel account-toolbar">
         <div>
           <p className="section-kicker">账号管理 / 端口管理</p>
           <h2>每个端口就是一个 QQ 模拟器现场</h2>
           <p className="muted-copy">
-            首次生成端口会建立 QQ 基础镜像；后续新增端口复制该模拟器环境，但不会复制登录账号信息。
+            上方设定端口规则，中间展开当前端口的 QQ 登录现场；下方端口以静默缩略卡片排列。
           </p>
         </div>
-        <button className="run-button" onClick={addPort} type="button">
-          <Plus size={17} />
-          新增端口
-        </button>
+        <div className="account-actions">
+          <button className="run-button" onClick={addPort} type="button">
+            <Plus size={17} />
+            生成端口
+          </button>
+          {activePort ? (
+            <button className="soft-button" onClick={() => clonePort(activePort)} type="button">
+              <Copy size={16} />
+              复制当前端口
+            </button>
+          ) : null}
+        </div>
       </section>
 
-      <section className="ports-grid">
+      {activePort ? (
+        <section className="panel qq-expanded">
+          <div className="qq-expanded__device">
+            <div className="qq-titlebar">
+              <span className={`account-light account-light--${activePort.accountStatus}`} />
+              <strong>{activePort.name}</strong>
+              <small>127.0.0.1:{activePort.port}</small>
+            </div>
+            <div className="qq-login-stage">
+              <Monitor size={58} />
+              <h3>QQ 客户端登录现场</h3>
+              <p>
+                这里承载真实 QQ 端口窗口。接入桌面 bridge 后，用户可在该区域输入账号密码并完成登录；缩小后回到底部静默卡片。
+              </p>
+              <div className="qq-login-form">
+                <input placeholder="QQ 账号" defaultValue={activePort.accountStatus === 'normal' ? activePort.account : ''} />
+                <input placeholder="QQ 密码" type="password" />
+                <button className="run-button" onClick={() => simulateLogin(activePort.id)} type="button">
+                  登录并校验
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="qq-expanded__side">
+            <p className="section-kicker">当前端口状态</p>
+            <h2>{activePort.accountStatus === 'normal' ? '账号正常' : '账号异常'}</h2>
+            <div className="status-panel">
+              <span>QQ 安装</span>
+              <strong>{activePort.qqInstalled ? '已安装' : '待下载'}</strong>
+              <span>账号状态</span>
+              <strong>{activePort.accountStatus === 'normal' ? activePort.account : '未登录 / 异常'}</strong>
+              <span>生成方式</span>
+              <strong>{activePort.source === 'base-download' ? '首个端口下载 QQ' : '复制模拟器'}</strong>
+            </div>
+            {activePort.accountStatus === 'abnormal' ? (
+              <div className="abnormal-box">
+                <strong>检测到账号异常</strong>
+                <span>是否初始化该端口？初始化会保留模拟器程序，但清空账号现场。</span>
+                <button className="soft-button danger" onClick={() => initializePort(activePort.id)} type="button">
+                  初始化端口
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </section>
+      ) : (
+        <section className="panel empty-port">
+          <HardDriveDownload size={38} />
+          <strong>还没有端口</strong>
+          <span>点击“生成端口”创建首个 QQ 基础镜像。</span>
+        </section>
+      )}
+
+      <section className="ports-grid silent-ports">
         {ports.map((port, index) => (
-          <div className="panel port-card" key={port.id}>
+          <button
+            className={`port-tile ${activePort?.id === port.id ? 'port-tile--active' : ''}`}
+            key={port.id}
+            onClick={() => selectPort(port.id)}
+            type="button"
+          >
             <div className="port-screen">
-              <span className={`screen-dot screen-dot--${port.status}`} />
+              <span className={`screen-dot screen-dot--${port.accountStatus}`} />
               <Monitor size={42} />
               <strong>{port.name}</strong>
               <small>127.0.0.1:{port.port}</small>
-            </div>
-            <div className="port-meta">
-              <div>
-                <span>QQ 安装状态</span>
-                <strong>{port.qqInstalled ? '已安装' : '待下载'}</strong>
-              </div>
-              <div>
-                <span>登录账号</span>
-                <strong>{port.account || '未登录'}</strong>
-              </div>
-              <div>
-                <span>生成方式</span>
-                <strong>{port.source === 'base-download' ? '首个端口下载 QQ' : '复制模拟器'}</strong>
-              </div>
-              <div>
-                <span>分发权重</span>
-                <strong>#{index + 1}</strong>
-              </div>
+              {port.accountStatus === 'abnormal' ? (
+                <div className="init-hint">
+                  账号异常
+                  <span>是否初始化？</span>
+                </div>
+              ) : null}
             </div>
             <div className="port-actions">
-              <button className="soft-button" onClick={() => clonePort(port)} type="button">
+              <button
+                className="soft-button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  clonePort(port);
+                }}
+                type="button"
+              >
                 <Copy size={15} />
                 复制端口
               </button>
-              <button className="soft-button danger" onClick={() => deletePort(port.id)} type="button">
+              <button
+                className="soft-button danger"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  deletePort(port.id);
+                }}
+                type="button"
+              >
                 <Trash2 size={15} />
                 删除
               </button>
             </div>
-          </div>
+            <small className="port-weight">分发序号 #{index + 1}</small>
+          </button>
         ))}
-
-        {ports.length === 0 ? (
-          <div className="panel empty-port">
-            <HardDriveDownload size={38} />
-            <strong>还没有端口</strong>
-            <span>点击“新增端口”创建首个 QQ 基础镜像。</span>
-          </div>
-        ) : null}
       </section>
     </div>
   );

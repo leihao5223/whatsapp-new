@@ -677,10 +677,9 @@ th {
   color: #0f766e;
 }
 
-.ports-grid {
+.account-layout {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px;
+  gap: 20px;
 }
 
 .account-toolbar {
@@ -690,23 +689,203 @@ th {
   justify-content: space-between;
 }
 
-.port-card {
-  padding: 16px;
+.account-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.qq-expanded {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 20px;
+  padding: 20px;
+}
+
+.qq-expanded__device {
+  overflow: hidden;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(94, 234, 212, 0.22), transparent 34%),
+    linear-gradient(145deg, #06272e, #0b5d57);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.qq-titlebar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 14px 16px;
+  color: rgba(222, 255, 249, 0.76);
+  border-bottom: 1px solid rgba(222, 255, 249, 0.12);
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.qq-titlebar strong {
+  color: #ffffff;
+}
+
+.qq-titlebar small {
+  color: rgba(222, 255, 249, 0.66);
+}
+
+.account-light {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: #fb7185;
+  box-shadow: 0 0 0 6px rgba(251, 113, 133, 0.14), 0 0 18px rgba(251, 113, 133, 0.74);
+}
+
+.account-light--normal {
+  background: #5dffb0;
+  box-shadow: 0 0 0 6px rgba(93, 255, 176, 0.14), 0 0 18px rgba(93, 255, 176, 0.74);
+}
+
+.qq-login-stage {
+  display: grid;
+  place-items: center;
+  min-height: 430px;
+  padding: 42px;
+  color: #dffff8;
+  text-align: center;
+  background-image:
+    linear-gradient(rgba(125, 255, 231, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(125, 255, 231, 0.06) 1px, transparent 1px);
+  background-size: 30px 30px;
+}
+
+.qq-login-stage svg {
+  color: #5eead4;
+  filter: drop-shadow(0 12px 24px rgba(94, 234, 212, 0.28));
+}
+
+.qq-login-stage h3 {
+  margin: 16px 0 8px;
+  color: #ffffff;
+  font-size: 1.45rem;
+}
+
+.qq-login-stage p {
+  max-width: 620px;
+  margin: 0 0 22px;
+  color: rgba(222, 255, 249, 0.7);
+  line-height: 1.75;
+}
+
+.qq-login-form {
+  display: grid;
+  grid-template-columns: minmax(0, 180px) minmax(0, 180px) auto;
+  gap: 10px;
+  width: min(100%, 620px);
+  padding: 12px;
+  border: 1px solid rgba(222, 255, 249, 0.14);
+  border-radius: 18px;
+  background: rgba(1, 32, 34, 0.42);
+}
+
+.qq-login-form input {
+  min-height: 42px;
+  border: 1px solid rgba(222, 255, 249, 0.16);
+  border-radius: 12px;
+  outline: none;
+  padding: 0 12px;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.qq-login-form input::placeholder {
+  color: rgba(222, 255, 249, 0.44);
+}
+
+.qq-expanded__side {
+  padding: 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 22px;
+  background: #f8fafc;
+}
+
+.qq-expanded__side h2 {
+  margin-bottom: 16px;
+}
+
+.status-panel {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.status-panel span {
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.status-panel strong {
+  margin-bottom: 8px;
+  color: #132238;
+}
+
+.abnormal-box {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #fecdd3;
+  border-radius: 16px;
+  color: #9f1239;
+  background: #fff1f2;
+}
+
+.abnormal-box span {
+  color: #be123c;
+  font-size: 0.84rem;
+  line-height: 1.6;
+}
+
+.ports-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(260px, 1fr));
+  gap: 18px;
+}
+
+.port-tile {
+  display: grid;
+  gap: 12px;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+}
+
+.port-tile--active .port-screen {
+  border-color: rgba(94, 234, 212, 0.68);
+  box-shadow:
+    0 0 0 4px rgba(94, 234, 212, 0.12),
+    0 22px 48px rgba(15, 118, 110, 0.18);
 }
 
 .port-screen {
   position: relative;
   display: grid;
   place-items: center;
-  min-height: 178px;
+  min-height: 220px;
   overflow: hidden;
   border: 1px solid rgba(15, 118, 110, 0.18);
-  border-radius: 18px;
+  border-radius: 24px;
   color: #dffff8;
   text-align: center;
   background:
     radial-gradient(circle at 50% 12%, rgba(94, 234, 212, 0.35), transparent 28%),
     linear-gradient(145deg, #06272e, #0b5d57);
+  transition:
+    transform 180ms ease,
+    border 180ms ease,
+    box-shadow 180ms ease;
 }
 
 .port-screen::before {
@@ -723,7 +902,8 @@ th {
 .port-screen svg,
 .port-screen strong,
 .port-screen small,
-.screen-dot {
+.screen-dot,
+.init-hint {
   position: relative;
   z-index: 1;
 }
@@ -743,7 +923,7 @@ th {
 }
 
 .port-screen small {
-  margin-top: 4px;
+  margin-top: 22px;
   color: rgba(221, 255, 249, 0.72);
 }
 
@@ -758,6 +938,7 @@ th {
   box-shadow: 0 0 0 5px rgba(148, 163, 184, 0.16);
 }
 
+.screen-dot--normal,
 .screen-dot--ready {
   background: #5dffb0;
   box-shadow: 0 0 0 5px rgba(93, 255, 176, 0.16), 0 0 18px rgba(93, 255, 176, 0.7);
@@ -768,8 +949,32 @@ th {
   box-shadow: 0 0 0 5px rgba(96, 165, 250, 0.16), 0 0 18px rgba(96, 165, 250, 0.58);
 }
 
+.screen-dot--abnormal,
 .screen-dot--offline {
   background: #fb7185;
+  box-shadow: 0 0 0 5px rgba(251, 113, 133, 0.16), 0 0 18px rgba(251, 113, 133, 0.68);
+}
+
+.init-hint {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border: 1px solid rgba(251, 113, 133, 0.35);
+  border-radius: 999px;
+  color: #fecdd3;
+  font-size: 0.78rem;
+  font-weight: 900;
+  background: rgba(127, 29, 29, 0.3);
+}
+
+.init-hint span {
+  margin-left: 6px;
+  color: #ffffff;
+}
+
+.port-weight {
+  justify-self: center;
+  color: #64748b;
+  font-weight: 800;
 }
 
 .port-meta {
