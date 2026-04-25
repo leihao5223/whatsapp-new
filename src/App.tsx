@@ -1,25 +1,32 @@
 import {
   Activity,
-  ArrowRight,
+  Bot,
   CheckCircle2,
+  Copy,
   DatabaseZap,
   Download,
   FileText,
   Gauge,
-  Link2,
+  HardDriveDownload,
+  LayoutDashboard,
+  Monitor,
   Pause,
   Play,
+  Plus,
   RotateCcw,
   Search,
+  Settings,
   ShieldCheck,
-  Sparkles,
+  Trash2,
   UploadCloud,
   XCircle,
 } from 'lucide-react';
 import { type ChangeEvent, type ReactNode, useMemo, useRef, useState } from 'react';
 import './styles.css';
 
+type PageKey = 'dashboard' | 'data' | 'accounts' | 'runner' | 'settings';
 type QueryStatus = 'pending' | 'running' | 'matched' | 'empty' | 'failed';
+type PortStatus = 'ready' | 'booting' | 'offline';
 
 type QueryItem = {
   id: string;
@@ -47,6 +54,16 @@ type SearchStats = {
   pending: number;
 };
 
+type EmulatorPort = {
+  id: string;
+  name: string;
+  port: number;
+  status: PortStatus;
+  qqInstalled: boolean;
+  account?: string;
+  source: 'base-download' | 'cloned';
+};
+
 const categoryTone: Record<SearchResult['category'], string> = {
   高价值: 'success',
   待复核: 'warning',
@@ -56,6 +73,26 @@ const categoryTone: Record<SearchResult['category'], string> = {
 const demoLines = ['QQ: 19888990001', 'wxid_alpha_2949', '13800138000', 'market-data-node', 'unknown-empty-case'];
 const demoMode = import.meta.env.VITE_QE_DEMO_MODE === 'true';
 const searchEndpoint = (import.meta.env.VITE_QE_SEARCH_ENDPOINT as string | undefined) || '/api/search';
+
+const initialPorts: EmulatorPort[] = [
+  {
+    id: 'port-1',
+    name: 'QQ端口 01',
+    port: 8787,
+    status: 'ready',
+    qqInstalled: true,
+    account: '未登录',
+    source: 'base-download',
+  },
+];
+
+const navItems: Array<{ key: PageKey; label: string; desc: string; icon: ReactNode }> = [
+  { key: 'dashboard', label: '控制台', desc: '运行总览', icon: <LayoutDashboard size={17} /> },
+  { key: 'data', label: '数据整理', desc: 'TXT 搜索任务', icon: <Search size={17} /> },
+  { key: 'accounts', label: '账号管理', desc: '端口/模拟器', icon: <Monitor size={17} /> },
+  { key: 'runner', label: '任务管理', desc: '并发分发', icon: <Bot size={17} /> },
+  { key: 'settings', label: 'API 配置', desc: '接口与部署', icon: <Settings size={17} /> },
+];
 
 const delay = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
@@ -88,7 +125,7 @@ const createMockResult = async (query: string): Promise<SearchResult | null> => 
     category,
     source: 'QE模拟引擎',
     confidence,
-    summary: `已根据输入 "${query}" 生成标准化线索，可在后续接入真实 QQ 搜索框或后端 API 后替换模拟引擎。`,
+    summary: `已根据输入 "${query}" 生成标准化线索；真实运行时由本地 QQ Runner 分发到各端口校验。`,
     tags: [query.includes('@') ? '邮箱' : '文本', /\d{6,}/.test(query) ? '数字账号' : '关键词', '自动整理'],
   };
 };
@@ -148,7 +185,7 @@ const searchQuery = async (query: string): Promise<SearchResult | null> => {
     category: normalizeCategory(data.category),
     source: data.source ?? 'QQ搜索框',
     confidence: Math.max(0, Math.min(100, Math.round(data.confidence ?? data.score ?? 72))),
-    summary: data.summary ?? '接口已返回结果，请在后端补充摘要字段以提升整理质量。',
+    summary: data.summary ?? '接口已返回结果，请在 Runner bridge 中补充摘要字段以提升整理质量。',
     tags: data.tags?.length ? data.tags : ['QQ搜索', '接口返回'],
   };
 };
@@ -172,10 +209,12 @@ const toCsv = (items: QueryItem[]) => {
 };
 
 function App() {
+  const [activePage, setActivePage] = useState<PageKey>('dashboard');
   const [items, setItems] = useState<QueryItem[]>([]);
   const [manualValue, setManualValue] = useState('');
   const [isRunning, setIsRunning] = useState(false);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [ports, setPorts] = useState<EmulatorPort[]>(initialPorts);
   const stopRequested = useRef(false);
 
   const stats: SearchStats = useMemo(
@@ -191,6 +230,8 @@ function App() {
 
   const completionRate = stats.total ? Math.round(((stats.total - stats.pending) / stats.total) * 100) : 0;
   const resultRows = items.filter((item) => item.status !== 'pending' || item.result);
+  const onlinePorts = ports.filter((port) => port.status === 'ready').length;
+  const nextPortNumber = ports.length ? Math.max(...ports.map((port) => port.port)) + 1 : 8787;
 
   const replaceItems = (nextItems: QueryItem[]) => {
     stopRequested.current = false;
@@ -206,6 +247,7 @@ function App() {
 
     const text = await file.text();
     replaceItems(parseTxtRows(text));
+    setActivePage('data');
     event.target.value = '';
   };
 
@@ -221,6 +263,7 @@ function App() {
 
   const loadDemoData = () => {
     replaceItems(parseTxtRows(demoLines.join('\n')));
+    setActivePage('data');
   };
 
   const resetWorkspace = () => {
@@ -241,7 +284,6 @@ function App() {
 
     stopRequested.current = false;
     setIsRunning(true);
-
     const queue = items.filter((item) => item.status === 'pending' || item.status === 'failed');
 
     for (const item of queue) {
@@ -282,176 +324,524 @@ function App() {
     URL.revokeObjectURL(url);
   };
 
+  const addPort = () => {
+    const isFirstPort = ports.length === 0;
+    const port: EmulatorPort = {
+      id: `port-${Date.now()}`,
+      name: `QQ端口 ${String(ports.length + 1).padStart(2, '0')}`,
+      port: nextPortNumber,
+      status: 'booting',
+      qqInstalled: true,
+      account: '未登录',
+      source: isFirstPort ? 'base-download' : 'cloned',
+    };
+
+    setPorts((current) => [...current, port]);
+    window.setTimeout(() => {
+      setPorts((current) =>
+        current.map((currentPort) => (currentPort.id === port.id ? { ...currentPort, status: 'ready' } : currentPort)),
+      );
+    }, 720);
+  };
+
+  const clonePort = (sourcePort: EmulatorPort) => {
+    const port: EmulatorPort = {
+      id: `port-${Date.now()}`,
+      name: `QQ端口 ${String(ports.length + 1).padStart(2, '0')}`,
+      port: nextPortNumber,
+      status: 'booting',
+      qqInstalled: sourcePort.qqInstalled,
+      account: '未登录',
+      source: 'cloned',
+    };
+
+    setPorts((current) => [...current, port]);
+    window.setTimeout(() => {
+      setPorts((current) =>
+        current.map((currentPort) => (currentPort.id === port.id ? { ...currentPort, status: 'ready' } : currentPort)),
+      );
+    }, 520);
+  };
+
+  const deletePort = (id: string) => {
+    setPorts((current) => current.filter((port) => port.id !== id));
+  };
+
+  const renderPage = () => {
+    switch (activePage) {
+      case 'data':
+        return (
+          <DataPage
+            activeIndex={activeIndex}
+            exportResults={exportResults}
+            handleFileUpload={handleFileUpload}
+            isRunning={isRunning}
+            items={items}
+            loadDemoData={loadDemoData}
+            manualValue={manualValue}
+            resultRows={resultRows}
+            runSearch={runSearch}
+            setManualValue={setManualValue}
+            addManualQuery={addManualQuery}
+            resetWorkspace={resetWorkspace}
+            stopSearch={stopSearch}
+          />
+        );
+      case 'accounts':
+        return <AccountPage addPort={addPort} clonePort={clonePort} deletePort={deletePort} ports={ports} />;
+      case 'runner':
+        return <RunnerPage onlinePorts={onlinePorts} ports={ports} stats={stats} />;
+      case 'settings':
+        return <SettingsPage />;
+      default:
+        return (
+          <DashboardPage
+            completionRate={completionRate}
+            handleFileUpload={handleFileUpload}
+            loadDemoData={loadDemoData}
+            onlinePorts={onlinePorts}
+            ports={ports}
+            setActivePage={setActivePage}
+            stats={stats}
+          />
+        );
+    }
+  };
+
   return (
-    <main className="app-shell">
-      <section className="hero">
-        <div className="hero__content">
-          <div className="eyebrow">
-            <Sparkles size={16} />
-            QE Intelligence Console
+    <main className="console-shell">
+      <aside className="sidebar">
+        <div className="brand-card">
+          <div className="brand-logo">QE</div>
+          <div>
+            <strong>QE 控制台</strong>
+            <span>QQ Runner System</span>
           </div>
-          <h1>面向 TXT 批量输入的 QE 数据整理系统</h1>
-          <p>
-            上传每行一组数据的 TXT 文件，系统会按队列逐条送入搜索流程，并把返回结果自动整理到分类表格中。
-            当前版本内置模拟搜索引擎，后续可替换为真实 QQ 搜索框自动化或服务端查询接口。
+        </div>
+
+        <nav className="main-nav">
+          {navItems.map((item) => (
+            <button
+              className={`nav-item ${activePage === item.key ? 'nav-item--active' : ''}`}
+              key={item.key}
+              onClick={() => setActivePage(item.key)}
+              type="button"
+            >
+              {item.icon}
+              <span>
+                <strong>{item.label}</strong>
+                <small>{item.desc}</small>
+              </span>
+            </button>
+          ))}
+        </nav>
+
+        <div className="sidebar-status">
+          <span className="pulse-dot" />
+          <div>
+            <strong>{onlinePorts} 个端口在线</strong>
+            <small>Runner: /api/search</small>
+          </div>
+        </div>
+      </aside>
+
+      <section className="content-shell">
+        <header className="topbar">
+          <div>
+            <span className="section-kicker">QE Intelligence Console</span>
+            <h1>{navItems.find((item) => item.key === activePage)?.label}</h1>
+          </div>
+          <button className="refresh-button" onClick={loadDemoData} type="button">
+            <RotateCcw size={16} />
+            载入演示
+          </button>
+        </header>
+
+        {renderPage()}
+      </section>
+    </main>
+  );
+}
+
+function DashboardPage({
+  completionRate,
+  handleFileUpload,
+  loadDemoData,
+  onlinePorts,
+  ports,
+  setActivePage,
+  stats,
+}: {
+  completionRate: number;
+  handleFileUpload: (event: ChangeEvent<HTMLInputElement>) => void;
+  loadDemoData: () => void;
+  onlinePorts: number;
+  ports: EmulatorPort[];
+  setActivePage: (page: PageKey) => void;
+  stats: SearchStats;
+}) {
+  return (
+    <div className="page-stack">
+      <section className="summary-grid">
+        <MetricCard icon={<FileText />} label="总数据" value={stats.total} />
+        <MetricCard icon={<CheckCircle2 />} label="有结果" value={stats.matched} tone="success" />
+        <MetricCard icon={<Monitor />} label="在线端口" value={onlinePorts} tone="success" />
+        <MetricCard icon={<Gauge />} label="整理进度" value={`${completionRate}%`} />
+      </section>
+
+      <section className="compact-grid">
+        <div className="panel intro-panel">
+          <div className="panel__header compact">
+            <div>
+              <p className="section-kicker">快速开始</p>
+              <h2>上传 TXT 后交给 QQ Runner 分发</h2>
+            </div>
+            <DatabaseZap className="panel-icon" />
+          </div>
+          <p className="muted-copy">
+            右侧每个功能独立成页。数据整理页负责上传和搜索；账号管理页负责生成端口，每个端口代表一个 QQ
+            模拟器实例。
           </p>
-          <div className="hero__actions">
+          <div className="action-row">
             <label className="primary-upload">
-              <UploadCloud size={20} />
-              上传 TXT 数据
+              <UploadCloud size={18} />
+              上传 TXT
               <input type="file" accept=".txt,text/plain" onChange={handleFileUpload} />
             </label>
-            <button type="button" onClick={loadDemoData} className="ghost-button">
+            <button className="ghost-button" onClick={loadDemoData} type="button">
               载入演示数据
+            </button>
+            <button className="ghost-button" onClick={() => setActivePage('accounts')} type="button">
+              管理端口
             </button>
           </div>
         </div>
-        <div className="hero-card">
-          <div className="orb" />
-          <DatabaseZap size={42} />
-          <span>Data Orbit</span>
-          <strong>{completionRate}%</strong>
-          <small>整理进度</small>
-        </div>
-      </section>
 
-      <section className="metrics-grid" aria-label="数据处理指标">
-        <MetricCard icon={<FileText />} label="总数据" value={stats.total} />
-        <MetricCard icon={<CheckCircle2 />} label="有结果" value={stats.matched} tone="success" />
-        <MetricCard icon={<XCircle />} label="无结果" value={stats.empty} tone="warning" />
-        <MetricCard icon={<Gauge />} label="待处理" value={stats.pending} />
-      </section>
-
-      <section className="workspace-grid">
-        <div className="panel intake-panel">
-          <div className="panel__header">
+        <div className="panel mini-panel">
+          <div className="panel__header compact">
             <div>
-              <p className="section-kicker">01 / 数据整理区域</p>
-              <h2>输入队列</h2>
+              <p className="section-kicker">端口概览</p>
+              <h2>{ports.length} 个模拟器端口</h2>
             </div>
             <ShieldCheck className="panel-icon" />
           </div>
-
-          <div className="manual-entry">
-            <Search size={18} />
-            <input
-              value={manualValue}
-              onChange={(event) => setManualValue(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  addManualQuery();
-                }
-              }}
-              placeholder="手动输入单条或多行数据，回车加入队列"
-            />
-            <button type="button" onClick={addManualQuery}>
-              加入
-            </button>
-          </div>
-
-          <div className="control-row">
-            <button type="button" className="run-button" onClick={runSearch} disabled={isRunning || !items.length}>
-              {isRunning ? <Activity size={18} /> : <Play size={18} />}
-              {isRunning ? '运行中' : '开始批量搜索'}
-            </button>
-            <button type="button" className="soft-button" onClick={stopSearch} disabled={!isRunning}>
-              <Pause size={18} />
-              暂停
-            </button>
-            <button type="button" className="soft-button" onClick={resetWorkspace}>
-              <RotateCcw size={18} />
-              重置
-            </button>
-          </div>
-
-          <div className="queue-list">
-            {items.length === 0 ? (
-              <EmptyState />
-            ) : (
-              items.map((item, index) => (
-                <div className={`queue-item queue-item--${item.status}`} key={item.id}>
-                  <span className="queue-item__index">{String(index + 1).padStart(2, '0')}</span>
-                  <div>
-                    <strong>{item.raw}</strong>
-                    <small>{item.normalized}</small>
-                  </div>
-                  <StatusPill status={item.status} active={activeIndex === index} />
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        <div className="panel result-panel">
-          <div className="panel__header">
-            <div>
-              <p className="section-kicker">02 / 结果表格</p>
-              <h2>搜索返回与分类</h2>
-            </div>
-            <button type="button" className="export-button" onClick={exportResults} disabled={!items.length}>
-              <Download size={17} />
-              导出 CSV
-            </button>
-          </div>
-
-          <div className="connector-note">
-            <Link2 size={16} />
-            搜索适配器：默认调用 /api/search 连接真实 QQ 搜索服务；设置 VITE_QE_DEMO_MODE=true 可切换演示模式。
-            <ArrowRight size={16} />
-          </div>
-
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>原始数据</th>
-                  <th>分类</th>
-                  <th>置信度</th>
-                  <th>结果摘要</th>
-                  <th>标签</th>
-                </tr>
-              </thead>
-              <tbody>
-                {resultRows.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="empty-cell">
-                      等待搜索返回结果
-                    </td>
-                  </tr>
-                ) : (
-                  resultRows.map((item) => (
-                    <tr key={item.id}>
-                      <td>
-                        <strong>{item.raw}</strong>
-                        <small>{item.normalized}</small>
-                      </td>
-                      <td>
-                        {item.result ? (
-                          <span className={`category category--${categoryTone[item.result.category]}`}>
-                            {item.result.category}
-                          </span>
-                        ) : (
-                          <span className="category category--muted">无结果</span>
-                        )}
-                      </td>
-                      <td>{item.result ? `${item.result.confidence}%` : '-'}</td>
-                      <td>{item.result?.summary ?? item.error ?? '未返回可整理结果'}</td>
-                      <td>
-                        <div className="tag-row">
-                          {(item.result?.tags ?? ['待复核']).map((tag) => (
-                            <span key={tag}>{tag}</span>
-                          ))}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+          <div className="port-mini-list">
+            {ports.map((port) => (
+              <div key={port.id}>
+                <span>{port.name}</span>
+                <strong>{port.account}</strong>
+                <small>{port.port}</small>
+              </div>
+            ))}
           </div>
         </div>
       </section>
-    </main>
+    </div>
+  );
+}
+
+function DataPage({
+  activeIndex,
+  addManualQuery,
+  exportResults,
+  handleFileUpload,
+  isRunning,
+  items,
+  loadDemoData,
+  manualValue,
+  resetWorkspace,
+  resultRows,
+  runSearch,
+  setManualValue,
+  stopSearch,
+}: {
+  activeIndex: number | null;
+  addManualQuery: () => void;
+  exportResults: () => void;
+  handleFileUpload: (event: ChangeEvent<HTMLInputElement>) => void;
+  isRunning: boolean;
+  items: QueryItem[];
+  loadDemoData: () => void;
+  manualValue: string;
+  resetWorkspace: () => void;
+  resultRows: QueryItem[];
+  runSearch: () => void;
+  setManualValue: (value: string) => void;
+  stopSearch: () => void;
+}) {
+  return (
+    <section className="workbench-grid">
+      <div className="panel intake-panel">
+        <div className="panel__header compact">
+          <div>
+            <p className="section-kicker">01 / 数据整理区域</p>
+            <h2>输入队列</h2>
+          </div>
+          <label className="icon-upload">
+            <UploadCloud size={17} />
+            <input type="file" accept=".txt,text/plain" onChange={handleFileUpload} />
+          </label>
+        </div>
+
+        <div className="manual-entry">
+          <Search size={16} />
+          <input
+            value={manualValue}
+            onChange={(event) => setManualValue(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                addManualQuery();
+              }
+            }}
+            placeholder="输入数据，回车加入队列"
+          />
+          <button type="button" onClick={addManualQuery}>
+            加入
+          </button>
+        </div>
+
+        <div className="control-row">
+          <button type="button" className="run-button" onClick={runSearch} disabled={isRunning || !items.length}>
+            {isRunning ? <Activity size={16} /> : <Play size={16} />}
+            {isRunning ? '运行中' : '开始'}
+          </button>
+          <button type="button" className="soft-button" onClick={stopSearch} disabled={!isRunning}>
+            <Pause size={16} />
+            暂停
+          </button>
+          <button type="button" className="soft-button" onClick={resetWorkspace}>
+            <RotateCcw size={16} />
+            重置
+          </button>
+          <button type="button" className="soft-button" onClick={loadDemoData}>
+            演示
+          </button>
+        </div>
+
+        <div className="queue-list compact-list">
+          {items.length === 0 ? (
+            <EmptyState />
+          ) : (
+            items.map((item, index) => (
+              <div className={`queue-item queue-item--${item.status}`} key={item.id}>
+                <span className="queue-item__index">{String(index + 1).padStart(2, '0')}</span>
+                <div>
+                  <strong>{item.raw}</strong>
+                  <small>{item.normalized}</small>
+                </div>
+                <StatusPill status={item.status} active={activeIndex === index} />
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div className="panel result-panel">
+        <div className="panel__header compact">
+          <div>
+            <p className="section-kicker">02 / 结果表格</p>
+            <h2>搜索返回与分类</h2>
+          </div>
+          <button type="button" className="export-button" onClick={exportResults} disabled={!items.length}>
+            <Download size={16} />
+            导出 CSV
+          </button>
+        </div>
+
+        <div className="connector-note">
+          默认调用 /api/search；Vercel 可转发到本地 QQ Runner，实现多端口并发校验。
+        </div>
+
+        <ResultTable resultRows={resultRows} />
+      </div>
+    </section>
+  );
+}
+
+function AccountPage({
+  addPort,
+  clonePort,
+  deletePort,
+  ports,
+}: {
+  addPort: () => void;
+  clonePort: (port: EmulatorPort) => void;
+  deletePort: (id: string) => void;
+  ports: EmulatorPort[];
+}) {
+  return (
+    <div className="page-stack">
+      <section className="panel account-toolbar">
+        <div>
+          <p className="section-kicker">账号管理 / 端口管理</p>
+          <h2>每个端口就是一个 QQ 模拟器现场</h2>
+          <p className="muted-copy">
+            首次生成端口会建立 QQ 基础镜像；后续新增端口复制该模拟器环境，但不会复制登录账号信息。
+          </p>
+        </div>
+        <button className="run-button" onClick={addPort} type="button">
+          <Plus size={17} />
+          新增端口
+        </button>
+      </section>
+
+      <section className="ports-grid">
+        {ports.map((port, index) => (
+          <div className="panel port-card" key={port.id}>
+            <div className="port-screen">
+              <span className={`screen-dot screen-dot--${port.status}`} />
+              <Monitor size={42} />
+              <strong>{port.name}</strong>
+              <small>127.0.0.1:{port.port}</small>
+            </div>
+            <div className="port-meta">
+              <div>
+                <span>QQ 安装状态</span>
+                <strong>{port.qqInstalled ? '已安装' : '待下载'}</strong>
+              </div>
+              <div>
+                <span>登录账号</span>
+                <strong>{port.account || '未登录'}</strong>
+              </div>
+              <div>
+                <span>生成方式</span>
+                <strong>{port.source === 'base-download' ? '首个端口下载 QQ' : '复制模拟器'}</strong>
+              </div>
+              <div>
+                <span>分发权重</span>
+                <strong>#{index + 1}</strong>
+              </div>
+            </div>
+            <div className="port-actions">
+              <button className="soft-button" onClick={() => clonePort(port)} type="button">
+                <Copy size={15} />
+                复制端口
+              </button>
+              <button className="soft-button danger" onClick={() => deletePort(port.id)} type="button">
+                <Trash2 size={15} />
+                删除
+              </button>
+            </div>
+          </div>
+        ))}
+
+        {ports.length === 0 ? (
+          <div className="panel empty-port">
+            <HardDriveDownload size={38} />
+            <strong>还没有端口</strong>
+            <span>点击“新增端口”创建首个 QQ 基础镜像。</span>
+          </div>
+        ) : null}
+      </section>
+    </div>
+  );
+}
+
+function RunnerPage({ onlinePorts, ports, stats }: { onlinePorts: number; ports: EmulatorPort[]; stats: SearchStats }) {
+  return (
+    <div className="page-stack">
+      <section className="summary-grid">
+        <MetricCard icon={<Monitor />} label="端口总数" value={ports.length} />
+        <MetricCard icon={<CheckCircle2 />} label="在线端口" value={onlinePorts} tone="success" />
+        <MetricCard icon={<Activity />} label="待处理" value={stats.pending} />
+        <MetricCard icon={<XCircle />} label="失败任务" value={stats.failed} tone="warning" />
+      </section>
+
+      <section className="panel">
+        <div className="panel__header compact">
+          <div>
+            <p className="section-kicker">任务管理</p>
+            <h2>平均分发策略</h2>
+          </div>
+          <Bot className="panel-icon" />
+        </div>
+        <div className="flow-grid">
+          {ports.map((port, index) => (
+            <div className="flow-card" key={port.id}>
+              <span>{String(index + 1).padStart(2, '0')}</span>
+              <strong>{port.name}</strong>
+              <small>任务会按轮询策略分配到该端口，端口内只保留独立账号现场。</small>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function SettingsPage() {
+  return (
+    <div className="page-stack">
+      <section className="panel settings-panel">
+        <div className="panel__header compact">
+          <div>
+            <p className="section-kicker">API 配置</p>
+            <h2>前端、Vercel 与本地 Runner 连接方式</h2>
+          </div>
+          <Settings className="panel-icon" />
+        </div>
+        <div className="config-list">
+          <ConfigRow label="前端搜索地址" value="VITE_QE_SEARCH_ENDPOINT=/api/search" />
+          <ConfigRow label="Vercel 转发 Runner" value="QQ_RUNNER_ENDPOINT=https://your-runner.example.com/search" />
+          <ConfigRow label="本地 Runner" value="npm run runner:qq -> http://127.0.0.1:8787/search" />
+          <ConfigRow label="真实 QQ Bridge" value="QQ_BRIDGE_URLS=http://127.0.0.1:9876/search,..." />
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ResultTable({ resultRows }: { resultRows: QueryItem[] }) {
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>原始数据</th>
+            <th>分类</th>
+            <th>置信度</th>
+            <th>结果摘要</th>
+            <th>标签</th>
+          </tr>
+        </thead>
+        <tbody>
+          {resultRows.length === 0 ? (
+            <tr>
+              <td colSpan={5} className="empty-cell">
+                等待搜索返回结果
+              </td>
+            </tr>
+          ) : (
+            resultRows.map((item) => (
+              <tr key={item.id}>
+                <td>
+                  <strong>{item.raw}</strong>
+                  <small>{item.normalized}</small>
+                </td>
+                <td>
+                  {item.result ? (
+                    <span className={`category category--${categoryTone[item.result.category]}`}>
+                      {item.result.category}
+                    </span>
+                  ) : (
+                    <span className="category category--muted">无结果</span>
+                  )}
+                </td>
+                <td>{item.result ? `${item.result.confidence}%` : '-'}</td>
+                <td>{item.result?.summary ?? item.error ?? '未返回可整理结果'}</td>
+                <td>
+                  <div className="tag-row">
+                    {(item.result?.tags ?? ['待复核']).map((tag) => (
+                      <span key={tag}>{tag}</span>
+                    ))}
+                  </div>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -463,7 +853,7 @@ function MetricCard({
 }: {
   icon: ReactNode;
   label: string;
-  value: number;
+  value: number | string;
   tone?: 'success' | 'warning';
 }) {
   return (
@@ -471,6 +861,15 @@ function MetricCard({
       <div>{icon}</div>
       <span>{label}</span>
       <strong>{value}</strong>
+    </div>
+  );
+}
+
+function ConfigRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="config-row">
+      <span>{label}</span>
+      <code>{value}</code>
     </div>
   );
 }
@@ -490,9 +889,9 @@ function StatusPill({ status, active }: { status: QueryStatus; active: boolean }
 function EmptyState() {
   return (
     <div className="empty-state">
-      <UploadCloud size={34} />
+      <UploadCloud size={30} />
       <strong>上传 TXT 或手动输入数据</strong>
-      <span>每行会生成一条待搜索任务，适合批量整理 QQ 搜索返回结果。</span>
+      <span>每行会生成一条待搜索任务，由 Runner 平均分发到多个 QQ 端口。</span>
     </div>
   );
 }
