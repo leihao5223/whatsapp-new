@@ -76,6 +76,7 @@ const demoLines = ['QQ: 19888990001', 'wxid_alpha_2949', '13800138000', 'market-
 const demoMode = import.meta.env.VITE_QE_DEMO_MODE === 'true';
 const searchEndpoint = (import.meta.env.VITE_QE_SEARCH_ENDPOINT as string | undefined) || '/api/search';
 const portLoginEndpoint = (import.meta.env.VITE_QE_PORT_LOGIN_ENDPOINT as string | undefined) || '/api/ports/login';
+const qqRuntimeViewEndpoint = import.meta.env.VITE_QQ_RUNTIME_VIEW_ENDPOINT as string | undefined;
 
 const initialPorts: EmulatorPort[] = [
   {
@@ -180,6 +181,18 @@ const loginPortAccount = async (port: EmulatorPort, account: string, password: s
     account: data.account ?? account,
     message: data.message ?? '托管 QQ Runtime 已完成自动登录校验。',
   };
+};
+
+const buildQqRuntimeViewUrl = (port: EmulatorPort) => {
+  if (!qqRuntimeViewEndpoint) {
+    return undefined;
+  }
+
+  const url = new URL(qqRuntimeViewEndpoint, window.location.origin);
+  url.searchParams.set('portId', port.id);
+  url.searchParams.set('portName', port.name);
+  url.searchParams.set('portNumber', String(port.port));
+  return url.toString();
 };
 
 const searchQuery = async (query: string): Promise<SearchResult | null> => {
@@ -466,11 +479,12 @@ function App() {
             addPort={addPort}
             clonePort={clonePort}
             deletePort={deletePort}
+            getRuntimeViewUrl={buildQqRuntimeViewUrl}
             initializePort={initializePort}
+            markPortLoggedIn={markPortLoggedIn}
             ports={ports}
             selectedPortId={selectedPortId}
             selectPort={setSelectedPortId}
-            markPortLoggedIn={markPortLoggedIn}
           />
         );
       case 'runner':
@@ -746,6 +760,7 @@ function AccountPage({
   addPort,
   clonePort,
   deletePort,
+  getRuntimeViewUrl,
   initializePort,
   ports,
   selectedPortId,
@@ -755,6 +770,7 @@ function AccountPage({
   addPort: () => void;
   clonePort: (port: EmulatorPort) => void;
   deletePort: (id: string) => void;
+  getRuntimeViewUrl: (port: EmulatorPort) => string | undefined;
   initializePort: (id: string) => void;
   ports: EmulatorPort[];
   selectedPortId?: string;
@@ -762,6 +778,7 @@ function AccountPage({
   markPortLoggedIn: (id: string, account: string) => void;
 }) {
   const activePort = ports.find((port) => port.id === selectedPortId) ?? ports[0];
+  const runtimeViewUrl = activePort ? getRuntimeViewUrl(activePort) : undefined;
   const [loginAccount, setLoginAccount] = useState(activePort?.accountStatus === 'normal' ? activePort.account ?? '' : '');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginMessage, setLoginMessage] = useState('');
@@ -821,35 +838,42 @@ function AccountPage({
                   <Monitor size={30} />
                   <span>QQ</span>
                 </div>
-                <div className="qq-app-body">
-                  <h3>QQ 客户端登录现场</h3>
-                  <p>这里展示纵向真实 QQ 应用窗口。商用部署时由托管安卓 QQ Runtime 执行自动登录并回传状态。</p>
-                  <div className="qq-login-form">
-                    <input
-                      onChange={(event) => setLoginAccount(event.target.value)}
-                      placeholder="QQ 账号"
-                      value={loginAccount}
-                    />
-                    <input
-                      onChange={(event) => setLoginPassword(event.target.value)}
-                      placeholder="QQ 密码"
-                      type="password"
-                      value={loginPassword}
-                    />
-                    <button className="run-button" onClick={handlePortLogin} type="button">
-                      登录并校验
-                    </button>
-                  </div>
-                  {loginMessage ? (
-                    <div
-                      className={`login-feedback ${
-                        activePort.accountStatus === 'normal' ? 'login-feedback--success' : 'login-feedback--warning'
-                      }`}
-                    >
-                      {loginMessage}
+                {runtimeViewUrl ? (
+                  <iframe className="qq-runtime-frame" src={runtimeViewUrl} title={`${activePort.name} QQ Runtime`} />
+                ) : (
+                  <div className="qq-app-body">
+                    <h3>QQ Runtime 未连接</h3>
+                    <p>
+                      要在网页内直接打开真实 QQ，需要先部署托管安卓 QQ Runtime，并配置
+                      VITE_QQ_RUNTIME_VIEW_ENDPOINT。
+                    </p>
+                    <div className="qq-login-form">
+                      <input
+                        onChange={(event) => setLoginAccount(event.target.value)}
+                        placeholder="QQ 账号"
+                        value={loginAccount}
+                      />
+                      <input
+                        onChange={(event) => setLoginPassword(event.target.value)}
+                        placeholder="QQ 密码"
+                        type="password"
+                        value={loginPassword}
+                      />
+                      <button className="run-button" onClick={handlePortLogin} type="button">
+                        请求 Runtime 登录
+                      </button>
                     </div>
-                  ) : null}
-                </div>
+                    {loginMessage ? (
+                      <div
+                        className={`login-feedback ${
+                          activePort.accountStatus === 'normal' ? 'login-feedback--success' : 'login-feedback--warning'
+                        }`}
+                      >
+                        {loginMessage}
+                      </div>
+                    ) : null}
+                  </div>
+                )}
                 <div className="qq-app-footer">
                   <span>账号：{activePort.accountStatus === 'normal' ? activePort.account : '未登录 / 异常'}</span>
                   <strong>{activePort.name}</strong>

@@ -61,8 +61,11 @@ npm run build
 4. Vercel API 转发到 `QQ_RUNNER_ENDPOINT` 对应的 Runtime `/login` 接口。
 5. Runtime 在指定端口内自动填充账号密码、完成 QQ 登录和状态校验。
 6. 搜索任务通过 `/api/search` 转发到 Runtime `/search`，再分发到已登录端口。
+7. 如果 Runtime 提供可嵌入的端口画面地址，前端会在端口展开区直接加载真实 QQ 画面。
 
 PC QQ 多开更依赖桌面会话和窗口管理，不适合云端商用托管。安卓 QQ 容器更适合做端口复制、账号隔离、自动化登录和横向扩容。
+
+> 重要：网页本身不能运行官方 QQ。要在网页里“直接打开真实 QQ”，必须先部署托管安卓 QQ Runtime，并提供可被前端 iframe/WebRTC/远程画面 SDK 加载的端口画面地址。仓库已预留 `VITE_QQ_RUNTIME_VIEW_ENDPOINT` 用于嵌入该真实画面。
 
 ### 账号管理与端口设计
 
