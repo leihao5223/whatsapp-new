@@ -54,7 +54,8 @@ const categoryTone: Record<SearchResult['category'], string> = {
 };
 
 const demoLines = ['QQ: 19888990001', 'wxid_alpha_2949', '13800138000', 'market-data-node', 'unknown-empty-case'];
-const searchEndpoint = import.meta.env.VITE_QE_SEARCH_ENDPOINT as string | undefined;
+const demoMode = import.meta.env.VITE_QE_DEMO_MODE === 'true';
+const searchEndpoint = (import.meta.env.VITE_QE_SEARCH_ENDPOINT as string | undefined) || '/api/search';
 
 const delay = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
@@ -101,7 +102,7 @@ const normalizeCategory = (category?: string): SearchResult['category'] => {
 };
 
 const searchQuery = async (query: string): Promise<SearchResult | null> => {
-  if (!searchEndpoint) {
+  if (demoMode) {
     return createMockResult(query);
   }
 
@@ -114,7 +115,17 @@ const searchQuery = async (query: string): Promise<SearchResult | null> => {
   });
 
   if (!response.ok) {
-    throw new Error(`搜索接口异常：${response.status}`);
+    const fallbackMessage = `搜索接口异常：${response.status}`;
+    try {
+      const errorData = (await response.json()) as { error?: string; message?: string };
+      throw new Error(errorData.error ?? errorData.message ?? fallbackMessage);
+    } catch (error) {
+      if (error instanceof Error && error.message !== fallbackMessage) {
+        throw error;
+      }
+
+      throw new Error(fallbackMessage, { cause: error });
+    }
   }
 
   const data = (await response.json()) as {
@@ -385,7 +396,7 @@ function App() {
 
           <div className="connector-note">
             <Link2 size={16} />
-            搜索适配器：未配置接口时使用 QE 模拟引擎；配置 VITE_QE_SEARCH_ENDPOINT 后会调用真实搜索服务。
+            搜索适配器：默认调用 /api/search 连接真实 QQ 搜索服务；设置 VITE_QE_DEMO_MODE=true 可切换演示模式。
             <ArrowRight size={16} />
           </div>
 
