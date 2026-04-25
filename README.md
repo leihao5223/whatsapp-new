@@ -49,19 +49,35 @@ npm run build
 
 `setup:cloud` 会执行 `npm ci --cache .npm-cache --prefer-offline`，把 npm 下载缓存保存在仓库工作区的 `.npm-cache/` 中，后续环境启动可复用锁文件安装结果。
 
-## 接入真实 QQ 搜索服务
+## 接入真实 QQ 搜索
 
-前端默认请求同域 `/api/search`，该 Vercel Serverless Function 会转发到真实 QQ 搜索服务。请在 Vercel Project Settings -> Environment Variables 中配置：
+浏览器/Vercel 不能直接下载、登录或操控官方 QQ 桌面客户端。真实 QQ 搜索需要在一台可运行 QQ 的本地机器上完成：
+
+1. 人工安装官方 QQ 应用并登录一个或多个 QQ 账号。
+2. 启动本项目的本地 QQ Runner。
+3. Vercel `/api/search` 转发任务到本地 Runner，Runner 再平均分发给多个 QQ worker。
+
+### 本地启动多账号 Runner
+
+先复制环境变量模板：
 
 ```bash
-QQ_SEARCH_ENDPOINT=https://your-qq-search-service.example/search
-# 可选：如果真实服务需要鉴权
-QQ_SEARCH_API_KEY=your-api-key
-# 可选：GET 或 POST，默认 POST
-QQ_SEARCH_METHOD=POST
+cp .env.example .env
 ```
 
-真实 QQ 搜索服务建议接受：
+默认 simulator 模式可先验证多账号分发链路：
+
+```bash
+QQ_RUNNER_WORKERS=qq-a,qq-b,qq-c npm run runner:qq
+```
+
+Runner 会启动：
+
+```bash
+http://127.0.0.1:8787/search
+```
+
+它接受：
 
 ```json
 {
@@ -69,7 +85,7 @@ QQ_SEARCH_METHOD=POST
 }
 ```
 
-并返回：
+并返回前端需要的标准结构：
 
 ```json
 {
@@ -82,7 +98,44 @@ QQ_SEARCH_METHOD=POST
 }
 ```
 
-如果你的 QQ 搜索服务返回 HTML，`/api/search` 会做基础文本提取并返回摘要；建议后续把 QQ 自动化/爬取逻辑封装成稳定 JSON 服务。
+### 接入真实 QQ 客户端
+
+真实模式请把桌面自动化或官方 QQ 搜索能力封装成本地 bridge 服务，然后配置：
+
+```bash
+QQ_BRIDGE_URLS=http://127.0.0.1:8899/search,http://127.0.0.1:8898/search
+QQ_RUNNER_CONCURRENCY=2
+npm run runner:qq
+```
+
+bridge 服务建议接受：
+
+```json
+{
+  "query": "待搜索数据",
+  "workerId": "qq-1"
+}
+```
+
+然后返回上面的标准 JSON 结构。这样可以让多个 QQ 账号窗口并发工作，并由 Runner 做轮询分发、节流和错误隔离。
+
+### Vercel 转发到 Runner
+
+如果 Runner 暴露了公网 HTTPS 地址，在 Vercel Project Settings -> Environment Variables 配置：
+
+```bash
+QQ_RUNNER_ENDPOINT=https://your-runner.example.com/search
+```
+
+`/api/search` 会优先转发到 `QQ_RUNNER_ENDPOINT`。如果你已有其他 QQ 搜索服务，也可继续使用：
+
+```bash
+QQ_SEARCH_ENDPOINT=https://your-qq-search-service.example/search
+QQ_SEARCH_API_KEY=your-api-key
+QQ_SEARCH_METHOD=POST
+```
+
+如果 QQ 服务返回 HTML，`/api/search` 会做基础文本提取并返回摘要；正式运行建议统一返回 JSON。
 
 如需本地或演示环境继续使用模拟结果，创建 `.env`：
 

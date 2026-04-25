@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "setup:cloud": "bash scripts/setup-cloud-env.sh",
+    "runner:qq": "node scripts/local-qq-runner.mjs",
     "build": "tsc -p tsconfig.app.json && vite build",
     "lint": "eslint .",
     "preview": "vite preview"

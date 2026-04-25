@@ -42,6 +42,7 @@ type ProviderPayload = {
 };
 
 const configuredEndpoint = process.env.QQ_SEARCH_ENDPOINT;
+const localRunnerEndpoint = process.env.QQ_RUNNER_ENDPOINT;
 const configuredMethod = (process.env.QQ_SEARCH_METHOD ?? 'POST').toUpperCase();
 const queryParam = process.env.QQ_SEARCH_QUERY_PARAM ?? 'q';
 const responseMode = (process.env.QQ_SEARCH_RESPONSE_MODE ?? 'json').toLowerCase();
@@ -160,6 +161,29 @@ const parseHtmlProviderResponse = async (response: Response, query: string): Pro
   };
 };
 
+const forwardToLocalRunner = async (query: string): Promise<SearchResponse> => {
+  if (!localRunnerEndpoint) {
+    throw new Error('QQ_RUNNER_ENDPOINT is not configured');
+  }
+
+  const response = await fetch(localRunnerEndpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ query }),
+  });
+
+  if (!response.ok) {
+    return {
+      success: false,
+      error: `QQ local runner returned ${response.status}`,
+    };
+  }
+
+  return (await response.json()) as SearchResponse;
+};
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Cache-Control', 'no-store');
 
@@ -174,10 +198,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
+  if (localRunnerEndpoint) {
+    try {
+      res.status(200).json(await forwardToLocalRunner(query));
+    } catch (error) {
+      res.status(502).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'QQ local runner request failed',
+      });
+    }
+    return;
+  }
+
   if (!configuredEndpoint) {
     res.status(501).json({
       success: false,
-      error: 'QQ_SEARCH_ENDPOINT is not configured. Add it in Vercel Environment Variables.',
+      error:
+        'QQ_RUNNER_ENDPOINT or QQ_SEARCH_ENDPOINT is not configured. Add one in Vercel Environment Variables.',
     });
     return;
   }
