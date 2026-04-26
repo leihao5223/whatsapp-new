@@ -162,7 +162,13 @@ const normalizeCategory = (category?: string): SearchResult['category'] => {
   return '待复核';
 };
 
-const loginPortAccount = async (port: EmulatorPort, account: string, password: string, runtimeBase: string) => {
+const loginPortAccount = async (
+  port: EmulatorPort,
+  account: string,
+  password: string,
+  runtimeBase: string,
+  loginMode: 'password' | 'existing-session' = 'password',
+) => {
   if (demoMode) {
     await delay(480);
     return {
@@ -178,6 +184,8 @@ const loginPortAccount = async (port: EmulatorPort, account: string, password: s
     },
     body: JSON.stringify({
       account,
+      bindOnly: loginMode === 'existing-session',
+      loginMode,
       password,
       portId: port.id,
       portName: port.name,
@@ -834,6 +842,22 @@ function AccountPage({
     }
   };
 
+  const bindExistingQq = async () => {
+    if (!activePort) {
+      return;
+    }
+
+    setLoginMessage('正在检测本机已登录 QQ...');
+
+    try {
+      const result = await loginPortAccount(activePort, loginAccount.trim() || '已登录QQ', '', runtimeBaseUrl, 'existing-session');
+      markPortLoggedIn(activePort.id, result.account);
+      setLoginMessage(result.message);
+    } catch (error) {
+      setLoginMessage(error instanceof Error ? error.message : '未检测到已登录 QQ，请先在电脑 QQ 完成扫码登录。');
+    }
+  };
+
   return (
     <div className="account-layout">
       <section className="account-toolbar account-toolbar--minimal">
@@ -865,15 +889,15 @@ function AccountPage({
                   <iframe className="qq-runtime-frame" src={runtimeViewUrl} title={`${activePort.name} QQ Runtime`} />
                 ) : (
                   <div className="qq-app-body">
-                    <h3>QQ Runtime 未连接</h3>
-                    <p>
-                      要在网页内直接打开真实 QQ，需要先部署托管安卓 QQ Runtime，并配置
-                      VITE_QQ_RUNTIME_VIEW_ENDPOINT。
-                    </p>
+                    <h3>绑定本机已登录 QQ</h3>
+                    <p>推荐先在电脑 QQ 扫码登录，然后点击绑定。账号密码方式保留为备用，不作为优先登录方式。</p>
                     <div className="qq-login-form">
+                      <button className="run-button" onClick={bindExistingQq} type="button">
+                        绑定已登录 QQ
+                      </button>
                       <input
                         onChange={(event) => setLoginAccount(event.target.value)}
-                        placeholder="QQ 账号"
+                        placeholder="QQ 账号（备用）"
                         value={loginAccount}
                       />
                       <input
@@ -883,7 +907,7 @@ function AccountPage({
                         value={loginPassword}
                       />
                       <button className="run-button" onClick={handlePortLogin} type="button">
-                        请求 Runtime 登录
+                        备用：账号密码登录
                       </button>
                     </div>
                     {loginMessage ? (

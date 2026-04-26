@@ -83,13 +83,11 @@ class QQBridgeHandler(BaseHTTPRequestHandler):
                 body = read_json(self)
                 account = str(body.get("account", "")).strip()
                 password = str(body.get("password", ""))
-                if not account or not password:
-                    json_response(self, 400, {"success": False, "error": "Missing account or password"})
-                    return
+                bind_only = bool(body.get("bindOnly")) or body.get("loginMode") == "existing-session"
 
                 open_qq()
                 time.sleep(2)
-                if pyautogui is not None:
+                if not bind_only and pyautogui is not None and account and password:
                     type_text(account)
                     pyautogui.press("tab")
                     type_text(password)
@@ -100,8 +98,8 @@ class QQBridgeHandler(BaseHTTPRequestHandler):
                     200,
                     {
                         "success": True,
-                        "account": account,
-                        "message": "已把账号密码发送到本机 QQ 登录窗口，请在本机确认登录状态。",
+                        "account": account or "本机已登录QQ",
+                        "message": "已绑定本机 QQ 窗口。若 QQ 已登录，系统将直接调用该 QQ；如未登录，请先在 QQ 内扫码登录。",
                     },
                 )
                 return

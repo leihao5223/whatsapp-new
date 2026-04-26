@@ -42,10 +42,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const body = typeof req.body === 'object' && req.body !== null ? (req.body as Record<string, unknown>) : {};
   const portId = typeof body.portId === 'string' ? body.portId.trim() : '';
-  const account = typeof body.account === 'string' ? body.account.trim() : '';
+  const account = typeof body.account === 'string' ? body.account.trim() : '已登录QQ';
   const password = typeof body.password === 'string' ? body.password : '';
+  const loginMode = typeof body.loginMode === 'string' ? body.loginMode : 'password';
 
-  if (!portId || !account || !password) {
+  if (!portId || (loginMode === 'password' && (!account || !password))) {
     res.status(400).json({ success: false, error: 'Missing portId, account, or password' });
     return;
   }
@@ -65,7 +66,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ portId, account, password }),
+      body: JSON.stringify({ portId, account, loginMode, password }),
     });
 
     const data = (await response.json()) as LoginResponse;

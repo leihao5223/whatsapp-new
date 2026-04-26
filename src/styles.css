@@ -845,6 +845,27 @@ th {
   background: rgba(1, 32, 34, 0.46);
 }
 
+.qq-login-form__primary {
+  display: grid;
+  gap: 10px;
+}
+
+.qq-login-divider {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 10px;
+  align-items: center;
+  color: rgba(222, 255, 249, 0.44);
+  font-size: 0.76rem;
+}
+
+.qq-login-divider::before,
+.qq-login-divider::after {
+  height: 1px;
+  background: rgba(222, 255, 249, 0.12);
+  content: "";
+}
+
 .qq-login-form input {
   min-height: 42px;
   border: 1px solid rgba(222, 255, 249, 0.16);
