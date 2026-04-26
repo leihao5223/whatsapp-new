@@ -77,6 +77,7 @@ const demoMode = import.meta.env.VITE_QE_DEMO_MODE === 'true';
 const searchEndpoint = (import.meta.env.VITE_QE_SEARCH_ENDPOINT as string | undefined) || '/api/search';
 const portLoginEndpoint = (import.meta.env.VITE_QE_PORT_LOGIN_ENDPOINT as string | undefined) || '/api/ports/login';
 const qqRuntimeViewEndpoint = import.meta.env.VITE_QQ_RUNTIME_VIEW_ENDPOINT as string | undefined;
+const runtimeBaseStorageKey = 'qe-runtime-base-url';
 
 const initialPorts: EmulatorPort[] = [
   {
@@ -90,6 +91,24 @@ const initialPorts: EmulatorPort[] = [
     source: 'base-download',
   },
 ];
+
+const normalizeRuntimeBase = (value: string) => value.trim().replace(/\/+$/, '');
+
+const readSavedRuntimeBase = () => {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+
+  return window.localStorage.getItem('qe-runtime-base') ?? '';
+};
+
+const runtimeEndpoint = (runtimeBase: string, path: 'health' | 'login' | 'search') => {
+  if (!runtimeBase) {
+    return undefined;
+  }
+
+  return `${normalizeRuntimeBase(runtimeBase)}/${path}`;
+};
 
 const navItems: Array<{ key: PageKey; label: string; desc: string; icon: ReactNode }> = [
   { key: 'dashboard', label: '控制台', desc: '运行总览', icon: <LayoutDashboard size={17} /> },
@@ -143,7 +162,7 @@ const normalizeCategory = (category?: string): SearchResult['category'] => {
   return '待复核';
 };
 
-const loginPortAccount = async (port: EmulatorPort, account: string, password: string) => {
+const loginPortAccount = async (port: EmulatorPort, account: string, password: string, runtimeBase: string) => {
   if (demoMode) {
     await delay(480);
     return {
@@ -152,7 +171,7 @@ const loginPortAccount = async (port: EmulatorPort, account: string, password: s
     };
   }
 
-  const response = await fetch(portLoginEndpoint, {
+  const response = await fetch(runtimeEndpoint(runtimeBase, 'login') ?? portLoginEndpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -195,12 +214,12 @@ const buildQqRuntimeViewUrl = (port: EmulatorPort) => {
   return url.toString();
 };
 
-const searchQuery = async (query: string): Promise<SearchResult | null> => {
+const searchQuery = async (query: string, runtimeBase: string): Promise<SearchResult | null> => {
   if (demoMode) {
     return createMockResult(query);
   }
 
-  const response = await fetch(searchEndpoint, {
+  const response = await fetch(runtimeEndpoint(runtimeBase, 'search') ?? searchEndpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -272,6 +291,7 @@ function App() {
   const [isRunning, setIsRunning] = useState(false);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [ports, setPorts] = useState<EmulatorPort[]>(initialPorts);
+  const [runtimeBaseUrl, setRuntimeBaseUrl] = useState(readSavedRuntimeBase);
   const [selectedPortId, setSelectedPortId] = useState<string | undefined>(initialPorts[0]?.id);
   const stopRequested = useRef(false);
 
@@ -353,7 +373,7 @@ function App() {
       updateItem(item.id, { status: 'running', error: undefined });
 
       try {
-        const result = await searchQuery(item.normalized);
+        const result = await searchQuery(item.normalized, runtimeBaseUrl);
         updateItem(item.id, result ? { status: 'matched', result } : { status: 'empty', result: undefined });
       } catch (error) {
         updateItem(item.id, {
@@ -483,6 +503,7 @@ function App() {
             initializePort={initializePort}
             markPortLoggedIn={markPortLoggedIn}
             ports={ports}
+            runtimeBaseUrl={runtimeBaseUrl}
             selectedPortId={selectedPortId}
             selectPort={setSelectedPortId}
           />
@@ -490,7 +511,7 @@ function App() {
       case 'runner':
         return <RunnerPage onlinePorts={onlinePorts} ports={ports} stats={stats} />;
       case 'settings':
-        return <SettingsPage />;
+        return <SettingsPage runtimeBaseUrl={runtimeBaseUrl} setRuntimeBaseUrl={setRuntimeBaseUrl} />;
       default:
         return (
           <DashboardPage
@@ -763,6 +784,7 @@ function AccountPage({
   getRuntimeViewUrl,
   initializePort,
   ports,
+  runtimeBaseUrl,
   selectedPortId,
   selectPort,
   markPortLoggedIn,
@@ -773,6 +795,7 @@ function AccountPage({
   getRuntimeViewUrl: (port: EmulatorPort) => string | undefined;
   initializePort: (id: string) => void;
   ports: EmulatorPort[];
+  runtimeBaseUrl: string;
   selectedPortId?: string;
   selectPort: (id: string) => void;
   markPortLoggedIn: (id: string, account: string) => void;
@@ -803,7 +826,7 @@ function AccountPage({
     setLoginMessage('正在请求托管 QQ Runtime 自动登录...');
 
     try {
-      const result = await loginPortAccount(activePort, nextAccount, loginPassword);
+      const result = await loginPortAccount(activePort, nextAccount, loginPassword, runtimeBaseUrl);
       markPortLoggedIn(activePort.id, result.account);
       setLoginMessage(result.message);
     } catch (error) {
@@ -980,7 +1003,55 @@ function RunnerPage({ onlinePorts, ports, stats }: { onlinePorts: number; ports:
   );
 }
 
-function SettingsPage() {
+function SettingsPage({
+  runtimeBaseUrl,
+  setRuntimeBaseUrl,
+}: {
+  runtimeBaseUrl: string;
+  setRuntimeBaseUrl: (value: string) => void;
+}) {
+  const [runtimeInput, setRuntimeInput] = useState(runtimeBaseUrl);
+  const [status, setStatus] = useState('');
+
+  const saveRuntime = () => {
+    const normalized = normalizeRuntimeBase(runtimeInput);
+    if (!normalized) {
+      window.localStorage.removeItem(runtimeBaseStorageKey);
+      setRuntimeBaseUrl('');
+      setRuntimeInput('');
+      setStatus('已清空 Runtime 地址，系统会回到默认 /api 转发模式。');
+      return;
+    }
+
+    window.localStorage.setItem(runtimeBaseStorageKey, normalized);
+    setRuntimeBaseUrl(normalized);
+    setRuntimeInput(normalized);
+    setStatus(`已保存：${normalized}`);
+  };
+
+  const testRuntime = async () => {
+    const normalized = normalizeRuntimeBase(runtimeInput);
+    if (!normalized) {
+      setStatus('请先填写 Runtime 地址，例如 http://192.168.1.6:8787');
+      return;
+    }
+
+    try {
+      const healthUrl = runtimeEndpoint(normalized, 'health');
+      if (!healthUrl) {
+        throw new Error('Runtime 地址无效。');
+      }
+
+      const response = await fetch(healthUrl);
+      if (!response.ok) {
+        throw new Error(`连接失败：${response.status}`);
+      }
+      setStatus('连接成功，已检测到 QQ Bridge。');
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : '连接失败，请确认 Bridge 正在运行。');
+    }
+  };
+
   return (
     <div className="page-stack">
       <section className="panel settings-panel">
@@ -990,6 +1061,27 @@ function SettingsPage() {
             <h2>前端、Vercel 与托管 QQ Runtime 连接方式</h2>
           </div>
           <Settings className="panel-icon" />
+        </div>
+        <div className="runtime-config-card">
+          <div>
+            <p className="section-kicker">一键连接本机 QQ</p>
+            <h2>填写你的 QQ Bridge 地址</h2>
+            <p>把刚才测试成功的地址填进来，例如：192.168.1.6:8787。保存后账号登录和数据搜索都会直接走这个 Bridge。</p>
+          </div>
+          <div className="runtime-config-form">
+            <input
+              onChange={(event) => setRuntimeInput(event.target.value)}
+              placeholder="http://192.168.1.6:8787"
+              value={runtimeInput}
+            />
+            <button className="run-button" onClick={saveRuntime} type="button">
+              保存地址
+            </button>
+            <button className="soft-button" onClick={testRuntime} type="button">
+              测试连接
+            </button>
+          </div>
+          {status ? <div className="runtime-status">{status}</div> : null}
         </div>
         <div className="config-list">
           <ConfigRow label="前端搜索地址" value="VITE_QE_SEARCH_ENDPOINT=/api/search" />

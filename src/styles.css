@@ -1183,6 +1183,49 @@ th {
   gap: 12px;
 }
 
+.runtime-config {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px solid rgba(20, 184, 166, 0.18);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top right, rgba(45, 212, 191, 0.12), transparent 34%),
+    #f8fafc;
+}
+
+.runtime-config p {
+  margin: 0;
+}
+
+.runtime-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.runtime-form input {
+  min-height: 42px;
+  border: 1px solid #dbe5ef;
+  border-radius: 12px;
+  outline: none;
+  padding: 0 13px;
+  color: #132238;
+  background: #ffffff;
+}
+
+.runtime-form input:focus {
+  border-color: #14b8a6;
+  box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.1);
+}
+
+.runtime-status {
+  color: #0f766e;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
 .config-row {
   display: grid;
   grid-template-columns: 230px minmax(0, 1fr);
