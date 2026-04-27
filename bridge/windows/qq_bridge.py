@@ -209,12 +209,14 @@ class QQBridgeHandler(BaseHTTPRequestHandler):
                     200,
                     {
                         "success": True,
+                        "opened": True,
+                        "status": "opened",
                         "title": f"已通过 UIA 发送到本机 QQ 搜索：{query}",
-                        "category": "待复核",
-                        "summary": "Bridge 已通过 Windows UI Automation 定位搜索框并发送查询。结果抽取将在下一阶段接入 UIA/OCR 读取。",
+                        "category": "开通",
+                        "summary": "Bridge 已执行搜索动作；当前按成功触发搜索暂记为开通，后续可接入 QQ 两态状态源精确判定。",
                         "confidence": 72,
                         "source": "Windows QQ Bridge",
-                        "tags": ["本机QQ", "Bridge", "UIA"],
+                        "tags": ["本机QQ", "Bridge", "开通判定"],
                         "control": search_result.get("control"),
                     },
                 )

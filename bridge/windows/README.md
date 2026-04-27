@@ -25,6 +25,8 @@ http://127.0.0.1:9876
 - `POST /search`
 - `GET /inspect`
 
-`/search` 使用 Windows UI Automation 精确查找 QQ 窗口内的输入控件。它不会再依赖鼠标当前焦点盲打；如果找不到搜索框，会明确返回错误，并提示先调用 `/inspect` 查看当前 QQ 控件树。
+`/search` 返回业务两态字段：`opened: true/false` 和 `status: opened/closed`。当前坐标版 Bridge 会在成功触发综合搜索后先返回 `opened: true` 作为链路占位；正式判定需要接入 QQ 的两态状态源（例如可读控件、接口返回或明确的状态标识），再把结果写回该字段。
+
+`/search` 的 Windows UI Automation 版本不会依赖鼠标当前焦点盲打；如果找不到搜索框，会明确返回错误，并提示先调用 `/inspect` 查看当前 QQ 控件树。QQ NT 内部控件不可读时，可使用综合搜索窗口相对坐标版本。
 
 `/inspect` 会返回 QQ 主窗口内可见控件的 `name`、`control_type`、`automation_id`，用于后续把搜索框定位规则进一步固化到具体 QQ 版本。

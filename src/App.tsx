@@ -40,9 +40,10 @@ type QueryItem = {
 
 type SearchResult = {
   title: string;
-  category: '高价值' | '待复核' | '无效线索';
+  category: '开通' | '未开通';
   source: string;
   confidence: number;
+  opened?: boolean;
   summary: string;
   tags: string[];
 };
@@ -67,9 +68,8 @@ type EmulatorPort = {
 };
 
 const categoryTone: Record<SearchResult['category'], string> = {
-  高价值: 'success',
-  待复核: 'warning',
-  无效线索: 'muted',
+  开通: 'success',
+  未开通: 'muted',
 };
 
 const demoLines = ['QQ: 19888990001', 'wxid_alpha_2949', '13800138000', 'market-data-node', 'unknown-empty-case'];
@@ -141,25 +141,25 @@ const createMockResult = async (query: string): Promise<SearchResult | null> => 
 
   const scoreSeed = Array.from(query).reduce((total, char) => total + char.charCodeAt(0), 0);
   const confidence = 62 + (scoreSeed % 35);
-  const category: SearchResult['category'] =
-    confidence >= 86 ? '高价值' : confidence >= 72 ? '待复核' : '无效线索';
+  const opened = confidence >= 76;
 
   return {
-    title: `匹配档案 ${query.slice(0, 18)}`,
-    category,
+    title: `${opened ? '已开通' : '未开通'} ${query.slice(0, 18)}`,
+    category: opened ? '开通' : '未开通',
     source: 'QE模拟引擎',
     confidence,
-    summary: `已根据输入 "${query}" 生成标准化线索；真实运行时由托管 QQ Runtime 分发到各端口校验。`,
-    tags: [query.includes('@') ? '邮箱' : '文本', /\d{6,}/.test(query) ? '数字账号' : '关键词', '自动整理'],
+    opened,
+    summary: `已根据输入 "${query}" 生成${opened ? '开通' : '未开通'}状态；真实运行时由 Bridge 返回两态判定。`,
+    tags: [/\d{6,}/.test(query) ? '号码' : '关键词', opened ? '开通' : '未开通'],
   };
 };
 
 const normalizeCategory = (category?: string): SearchResult['category'] => {
-  if (category === '高价值' || category === '待复核' || category === '无效线索') {
+  if (category === '开通' || category === '未开通') {
     return category;
   }
 
-  return '待复核';
+  return '未开通';
 };
 
 const loginPortAccount = async (
@@ -251,6 +251,8 @@ const searchQuery = async (query: string, runtimeBase: string): Promise<SearchRe
 
   const data = (await response.json()) as {
     success?: boolean;
+    opened?: boolean;
+    status?: string;
     title?: string;
     category?: string;
     summary?: string;
@@ -260,22 +262,30 @@ const searchQuery = async (query: string, runtimeBase: string): Promise<SearchRe
     tags?: string[];
   };
 
-  if (data.success === false) {
+  const opened =
+    typeof data.opened === 'boolean'
+      ? data.opened
+      : data.status === 'opened' || data.status === 'active'
+        ? true
+        : false;
+
+  if (data.success === false || opened === false) {
     return null;
   }
 
   return {
-    title: data.title ?? `QQ 搜索返回 ${query.slice(0, 18)}`,
-    category: normalizeCategory(data.category),
+    title: data.title ?? `${opened ? '已开通' : '未开通'}：${query.slice(0, 18)}`,
+    category: opened ? '开通' : normalizeCategory(data.category),
     source: data.source ?? 'QQ搜索框',
     confidence: Math.max(0, Math.min(100, Math.round(data.confidence ?? data.score ?? 72))),
-    summary: data.summary ?? '接口已返回结果，请在托管 QQ Runtime 中补充摘要字段以提升整理质量。',
-    tags: data.tags?.length ? data.tags : ['QQ搜索', '接口返回'],
+    opened,
+    summary: data.summary ?? (opened ? 'Bridge 已判定该号码为开通状态。' : 'Bridge 已判定该号码未开通。'),
+    tags: data.tags?.length ? data.tags : ['QQ搜索', opened ? '开通' : '未开通'],
   };
 };
 
 const toCsv = (items: QueryItem[]) => {
-  const headers = ['原始数据', '标准化数据', '状态', '分类', '置信度', '结果标题', '摘要', '标签'];
+  const headers = ['原始数据', '标准化数据', '状态', '开通状态', '置信度', '结果标题', '摘要', '标签'];
   const rows = items.map((item) => [
     item.raw,
     item.normalized,
@@ -410,6 +420,20 @@ function App() {
     URL.revokeObjectURL(url);
   };
 
+  const exportOpenedNumbers = () => {
+    const openedRows = items
+      .filter((item) => item.result?.opened === true)
+      .map((item) => item.normalized)
+      .join('\n');
+    const blob = new Blob([openedRows], { type: 'text/plain;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `opened-numbers-${new Date().toISOString().slice(0, 10)}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const addPort = () => {
     const isFirstPort = ports.length === 0;
     const port: EmulatorPort = {
@@ -487,6 +511,7 @@ function App() {
         return (
           <DataPage
             activeIndex={activeIndex}
+            exportOpenedNumbers={exportOpenedNumbers}
             exportResults={exportResults}
             handleFileUpload={handleFileUpload}
             isRunning={isRunning}
@@ -670,6 +695,7 @@ function DashboardPage({
 function DataPage({
   activeIndex,
   addManualQuery,
+  exportOpenedNumbers,
   exportResults,
   handleFileUpload,
   isRunning,
@@ -684,6 +710,7 @@ function DataPage({
 }: {
   activeIndex: number | null;
   addManualQuery: () => void;
+  exportOpenedNumbers: () => void;
   exportResults: () => void;
   handleFileUpload: (event: ChangeEvent<HTMLInputElement>) => void;
   isRunning: boolean;
@@ -769,10 +796,20 @@ function DataPage({
             <p className="section-kicker">02 / 结果表格</p>
             <h2>搜索返回与分类</h2>
           </div>
-          <button type="button" className="export-button" onClick={exportResults} disabled={!items.length}>
-            <Download size={16} />
-            导出 CSV
-          </button>
+          <div className="action-row">
+            <button
+              type="button"
+              className="export-button"
+              onClick={exportOpenedNumbers}
+              disabled={!items.some((item) => item.result?.opened === true)}
+            >
+              <Download size={16} />
+              导出开通号码 TXT
+            </button>
+            <button type="button" className="soft-button" onClick={exportResults} disabled={!items.length}>
+              导出明细 CSV
+            </button>
+          </div>
         </div>
 
         <div className="connector-note">
@@ -1158,7 +1195,7 @@ function ResultTable({ resultRows }: { resultRows: QueryItem[] }) {
                 <td>{item.result?.summary ?? item.error ?? '未返回可整理结果'}</td>
                 <td>
                   <div className="tag-row">
-                    {(item.result?.tags ?? ['待复核']).map((tag) => (
+                    {(item.result?.tags ?? ['未开通']).map((tag) => (
                       <span key={tag}>{tag}</span>
                     ))}
                   </div>
