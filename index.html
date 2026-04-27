@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhatsApp New</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <aside class="sidebar">
+      <header class="sidebar-header">
+        <h1>Chats</h1>
+      </header>
+      <input id="contactSearch" class="search" type="search" placeholder="搜索联系人...">
+      <ul id="contactList" class="contact-list" aria-label="联系人列表"></ul>
+    </aside>
+
+    <section class="chat-area">
+      <header class="chat-header">
+        <div>
+          <h2 id="chatTitle">选择一个会话</h2>
+          <p id="chatSubtitle">准备开始聊天</p>
+        </div>
+      </header>
+
+      <div id="messageList" class="message-list" aria-live="polite"></div>
+
+      <form id="composer" class="composer">
+        <input
+          id="messageInput"
+          type="text"
+          autocomplete="off"
+          placeholder="输入消息..."
+          required
+        >
+        <button type="submit">发送</button>
+      </form>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
