@@ -8,9 +8,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 try:
-    import pyautogui
+    import pyperclip
+    from pywinauto import Desktop
+    from pywinauto.keyboard import send_keys
 except ImportError:  # pragma: no cover - handled by setup instructions.
-    pyautogui = None
+    Desktop = None
+    pyperclip = None
+    send_keys = None
 
 
 HOST = os.getenv("QQ_BRIDGE_HOST", "127.0.0.1")
@@ -45,10 +49,90 @@ def open_qq() -> None:
     subprocess.Popen([QQ_EXE], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
-def type_text(value: str) -> None:
-    if pyautogui is None:
-        raise RuntimeError("pyautogui is not installed. Run: pip install -r requirements.txt")
-    pyautogui.write(value, interval=0.025)
+def qq_windows() -> list[Any]:
+    if Desktop is None:
+        raise RuntimeError("pywinauto is not installed. Run: pip install -r requirements.txt")
+
+    windows = []
+    for window in Desktop(backend="uia").windows():
+        title = window.window_text()
+        class_name = window.element_info.class_name or ""
+        if "QQ" in title or "腾讯" in title or "TXGuiFoundation" in class_name:
+            windows.append(window)
+    return windows
+
+
+def compact_control(control: Any) -> dict[str, str]:
+    info = control.element_info
+    return {
+        "autoId": info.automation_id or "",
+        "className": info.class_name or "",
+        "controlType": info.control_type or "",
+        "name": info.name or "",
+    }
+
+
+def inspect_qq_controls(limit: int = 80) -> list[dict[str, str]]:
+    controls: list[dict[str, str]] = []
+    for window in qq_windows():
+        controls.append({"autoId": "", "className": "", "controlType": "Window", "name": window.window_text()})
+        for control in window.descendants():
+            item = compact_control(control)
+            if item["controlType"] or item["name"] or item["autoId"]:
+                controls.append(item)
+            if len(controls) >= limit:
+                return controls
+    return controls
+
+
+def is_search_candidate(control: Any) -> bool:
+    info = control.element_info
+    text = " ".join(
+        [
+            info.name or "",
+            info.automation_id or "",
+            info.class_name or "",
+            info.control_type or "",
+        ],
+    ).lower()
+    return info.control_type in {"Edit", "ComboBox"} and any(keyword in text for keyword in ["search", "搜索", "查找"])
+
+
+def find_search_control() -> Any | None:
+    for window in qq_windows():
+        for control in window.descendants():
+            if is_search_candidate(control):
+                return control
+    return None
+
+
+def paste_text(value: str) -> None:
+    if pyperclip is None or send_keys is None:
+        raise RuntimeError("pyperclip/pywinauto keyboard is not installed. Run: pip install -r requirements.txt")
+    pyperclip.copy(value)
+    send_keys("^a")
+    send_keys("^v")
+
+
+def run_uia_search(query: str) -> dict[str, Any]:
+    open_qq()
+    time.sleep(1)
+
+    search_control = find_search_control()
+    if search_control is None:
+        return {
+            "success": False,
+            "error": "未找到 QQ 搜索框控件。请先调用 /inspect 查看 QQ UIA 控件树，并按真实控件特征适配。",
+            "controls": inspect_qq_controls(40),
+        }
+
+    search_control.set_focus()
+    paste_text(query)
+    send_keys("{ENTER}")
+    return {
+        "success": True,
+        "control": compact_control(search_control),
+    }
 
 
 class QQBridgeHandler(BaseHTTPRequestHandler):
@@ -59,6 +143,10 @@ class QQBridgeHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/health":
+            try:
+                windows = [window.window_text() for window in qq_windows()]
+            except Exception:
+                windows = []
             json_response(
                 self,
                 200,
@@ -66,8 +154,13 @@ class QQBridgeHandler(BaseHTTPRequestHandler):
                     "ok": True,
                     "mode": "windows-qq-bridge",
                     "qqExe": QQ_EXE,
+                    "windows": windows,
                 },
             )
+            return
+
+        if self.path == "/inspect":
+            json_response(self, 200, {"success": True, "controls": inspect_qq_controls()})
             return
 
         json_response(self, 404, {"success": False, "error": "Not found"})
@@ -87,11 +180,6 @@ class QQBridgeHandler(BaseHTTPRequestHandler):
 
                 open_qq()
                 time.sleep(2)
-                if not bind_only and pyautogui is not None and account and password:
-                    type_text(account)
-                    pyautogui.press("tab")
-                    type_text(password)
-                    pyautogui.press("enter")
 
                 json_response(
                     self,
@@ -111,22 +199,23 @@ class QQBridgeHandler(BaseHTTPRequestHandler):
                     json_response(self, 400, {"success": False, "error": "Missing query"})
                     return
 
-                if pyautogui is not None:
-                    pyautogui.hotkey("ctrl", "f")
-                    type_text(query)
-                    pyautogui.press("enter")
+                search_result = run_uia_search(query)
+                if not search_result.get("success"):
+                    json_response(self, 422, search_result)
+                    return
 
                 json_response(
                     self,
                     200,
                     {
                         "success": True,
-                        "title": f"已发送到本机 QQ 搜索：{query}",
+                        "title": f"已通过 UIA 发送到本机 QQ 搜索：{query}",
                         "category": "待复核",
-                        "summary": "Bridge 已把搜索内容发送到本机 QQ，结果抽取将在下一阶段接入 OCR/窗口读取。",
+                        "summary": "Bridge 已通过 Windows UI Automation 定位搜索框并发送查询。结果抽取将在下一阶段接入 UIA/OCR 读取。",
                         "confidence": 72,
                         "source": "Windows QQ Bridge",
-                        "tags": ["本机QQ", "Bridge"],
+                        "tags": ["本机QQ", "Bridge", "UIA"],
+                        "control": search_result.get("control"),
                     },
                 )
                 return
