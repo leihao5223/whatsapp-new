@@ -1972,6 +1972,51 @@ textarea::placeholder {
   color: rgba(255, 255, 255, 0.5) !important;
 }
 
+/* 落地页：白底表单区文字改深色（覆盖上方全局白字） */
+.landing-page-root input:not([type='checkbox']):not([type='radio']),
+.landing-page-root select,
+.landing-page-root textarea {
+  color: #0f172a !important;
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+}
+
+.landing-page-root option {
+  color: #0f172a !important;
+  background: #ffffff !important;
+}
+
+.landing-page-root input[type='file'] {
+  color: #0f172a !important;
+}
+
+.landing-page-root input::placeholder,
+.landing-page-root textarea::placeholder {
+  color: rgba(15, 23, 42, 0.48) !important;
+}
+
+.landing-page-root .landing-field-label,
+.landing-page-root .landing-check span,
+.landing-page-root .landing-preview-meta,
+.landing-page-root .landing-limit-row span,
+.landing-page-root .landing-limit-row small,
+.landing-page-root .panel__header .section-kicker,
+.landing-page-root .panel__header h2,
+.landing-page-root .muted-copy {
+  color: #0f172a !important;
+}
+
+.landing-page-root .soft-button {
+  color: #0f172a !important;
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+}
+
+.landing-page-root .landing-gallery-card strong,
+.landing-page-root .landing-gallery-card small {
+  color: #0f172a !important;
+}
+
 .landing-generator-form {
   display: grid;
   gap: 12px;
