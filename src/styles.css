@@ -100,6 +100,7 @@ button:disabled {
   grid-template-columns: 260px minmax(0, 1fr);
   width: 100%;
   min-height: 100vh;
+  align-items: stretch;
   font-size: calc(1rem * var(--ui-scale));
 }
 
@@ -109,12 +110,13 @@ button:disabled {
 }
 
 .sidebar {
-  position: sticky;
-  top: 0;
+  position: relative;
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  overflow: hidden;
+  align-self: stretch;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: hidden;
   color: #d7fff7;
   background:
     linear-gradient(180deg, rgba(17, 185, 166, 0.12), transparent 42%),
@@ -144,6 +146,7 @@ button:disabled {
 
 .brand-card {
   display: flex;
+  flex-shrink: 0;
   gap: 12px;
   align-items: flex-start;
   min-height: 82px;
@@ -240,7 +243,12 @@ button:disabled {
 .main-nav {
   display: grid;
   gap: 8px;
+  flex: 1 1 auto;
+  align-content: start;
+  min-height: 0;
   padding: 16px 12px;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .nav-item {
@@ -300,6 +308,7 @@ button:disabled {
 
 .sidebar-status {
   display: flex;
+  flex-shrink: 0;
   gap: 10px;
   align-items: center;
   margin: auto 14px 16px;
@@ -319,6 +328,9 @@ button:disabled {
 }
 
 .sidebar-footer {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
   margin: 0 14px 18px;
 }
 
