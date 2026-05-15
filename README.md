@@ -103,6 +103,12 @@ http://127.0.0.1:8787/search
 http://127.0.0.1:8787/login
 ```
 
+并额外提供基线识别接口（用于“先录入开通样本，再录入未开通样本”）：
+
+```bash
+http://127.0.0.1:8787/baseline
+```
+
 搜索接口接受：
 
 ```json
@@ -110,6 +116,42 @@ http://127.0.0.1:8787/login
   "query": "每行数据"
 }
 ```
+
+### 号码开通/未开通基线识别
+
+你可以按下面流程建立两态基线：
+
+1. 先拿一个确定“已开通”的号码录入开通样本。
+2. 再拿一个确定“未开通”的号码录入未开通样本。
+3. 后续所有 `/search` 请求会自动和两组样本做差异对比，返回更接近哪一侧。
+
+录入样本（开通）：
+
+```bash
+curl -X POST http://127.0.0.1:8787/baseline \
+  -H "Content-Type: application/json" \
+  -d "{\"query\":\"13800138000\",\"status\":\"opened\"}"
+```
+
+录入样本（未开通）：
+
+```bash
+curl -X POST http://127.0.0.1:8787/baseline \
+  -H "Content-Type: application/json" \
+  -d "{\"query\":\"13800138001\",\"status\":\"closed\"}"
+```
+
+查看当前基线：
+
+```bash
+curl http://127.0.0.1:8787/baseline
+```
+
+说明：
+
+- `status` 支持 `opened/closed`（也兼容 `开通/未开通`）。
+- 当两侧样本都存在时，`/search` 返回会附带 `baseline` 距离信息和 `baseline-compare` 标签。
+- 前端结果表现在会把“未开通”显示为有效状态，而不是“无结果”。
 
 并返回前端需要的标准结构：
 

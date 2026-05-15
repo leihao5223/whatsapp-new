@@ -3,10 +3,17 @@
   "version": "0.1.0",
   "description": "QE data organization system for TXT driven batch search and result classification.",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "setup:cloud": "bash scripts/setup-cloud-env.sh",
     "runner:qq": "node scripts/local-qq-runner.mjs",
+    "electron:dev": "npm run build && electron .",
+    "build:desktop": "powershell -ExecutionPolicy Bypass -File scripts/build-windows-desktop.ps1",
+    "verify:desktop-build": "powershell -ExecutionPolicy Bypass -File scripts/verify-windows-build.ps1",
+    "benchmark:single-node": "node scripts/benchmark-single-node.mjs",
+    "verify:search-core": "node scripts/verify-search-core.mjs",
+    "simulate:sharding": "node scripts/simulate-sharding.mjs",
     "build": "tsc -p tsconfig.app.json && vite build",
     "lint": "eslint .",
     "preview": "vite preview"
@@ -22,8 +29,55 @@
     "url": "https://github.com/leihao5223/whatsapp-new/issues"
   },
   "homepage": "https://github.com/leihao5223/whatsapp-new#readme",
+  "build": {
+    "appId": "com.zhagou.data.console",
+    "productName": "ZhaGouData",
+    "directories": {
+      "output": "release"
+    },
+    "electronDist": "node_modules/electron/dist",
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "desktop-bundle",
+        "to": "desktop-bundle"
+      }
+    ],
+    "extraFiles": [
+      {
+        "from": "deploy/启动渣狗.bat",
+        "to": "启动渣狗.bat"
+      },
+      {
+        "from": "deploy/使用说明.txt",
+        "to": "使用说明.txt"
+      },
+      {
+        "from": "scripts/install-playwright-kernel.bat",
+        "to": "安装Playwright内核.bat"
+      },
+      {
+        "from": "deploy/ZhaGouData-setup.bat",
+        "to": "ZhaGouData-setup.bat"
+      }
+    ],
+    "win": {
+      "target": [
+        "dir"
+      ],
+      "executableName": "ZhaGouData",
+      "signAndEditExecutable": false
+    },
+    "npmRebuild": false,
+    "asar": true
+  },
   "dependencies": {
     "lucide-react": "^1.11.0",
+    "playwright": "^1.59.1",
     "react": "^19.2.5",
     "react-dom": "^19.2.5"
   },
@@ -33,6 +87,8 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8",
     "eslint": "^10.2.1",
     "globals": "^17.5.0",
     "typescript": "^6.0.3",

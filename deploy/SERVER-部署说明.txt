@@ -1,0 +1,42 @@
+网页版：Nginx 提供前端静态文件，并把 /api 与 /batch 等路径反代到本机 Node Runner（与 vite 开发代理一致）。
+
+一、服务器要求
+- Debian/Ubuntu，Node.js 20+，Nginx。
+- 开放 80/443（若上证书自行改 Nginx）。
+
+二、首次安装（在 /opt/whatsapp-new 有完整代码后）
+1) 系统依赖与 Chromium（需 root）
+   cd /opt/whatsapp-new
+   npm ci
+   npx playwright install-deps chromium
+   npx playwright install chromium
+
+2) 构建前端
+   npm run build
+   chmod -R a+rX dist
+   （若 umask 较严，不加这行 Nginx 会因 600/700 静态文件报 403）
+
+3) 环境变量（查号密文 + 口令，与桌面版相同逻辑）
+   编辑 /etc/default/qe-runner，参考 deploy/env.production.example
+   把 deploy/auth-users.json 复制为 /opt/whatsapp-new/.cache/auth-users.json（或继续用 add-subaccount 维护）
+
+4) systemd
+   cp deploy/qe-runner.service.example /etc/systemd/system/qe-runner.service
+   systemctl daemon-reload
+   systemctl enable --now qe-runner
+   journalctl -u qe-runner -f
+
+5) Nginx
+   参考 deploy/nginx-qe.conf.sample，root 指向 /opt/whatsapp-new/dist，改 server_name
+   nginx -t && systemctl reload nginx
+
+三、朋友使用
+浏览器打开你的域名或 IP，账号见 .cache/auth-users.json（或你分的子账号）。
+
+四、更新代码
+   cd /opt/whatsapp-new && git pull
+   npm ci && npm run build && systemctl restart qe-runner
+
+五、安全建议
+- Runner 只监听 127.0.0.1，勿把 8787 直接暴露公网。
+- 生产务必 HTTPS；修改默认 AVSOV_BATCH_TOKEN 与登录密码。

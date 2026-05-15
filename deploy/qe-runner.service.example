@@ -1,0 +1,20 @@
+[Unit]
+Description=ZhaGou QE Runner (API + Playwright batch)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/whatsapp-new
+ExecStart=/usr/bin/node scripts/local-qq-runner.mjs
+Restart=always
+RestartSec=3
+
+Environment=NODE_ENV=production
+Environment=QQ_RUNNER_LISTEN_HOST=127.0.0.1
+Environment=QQ_RUNNER_PORT=8787
+Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/whatsapp-new/.cache/pw-browsers
+Environment=QE_AUTH_USERS_PATH=/opt/whatsapp-new/.cache/auth-users.json
+EnvironmentFile=-/etc/default/qe-runner
+
+[Install]
+WantedBy=multi-user.target

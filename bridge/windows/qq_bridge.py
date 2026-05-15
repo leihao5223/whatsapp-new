@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -20,6 +21,12 @@ except ImportError:  # pragma: no cover - handled by setup instructions.
 HOST = os.getenv("QQ_BRIDGE_HOST", "127.0.0.1")
 PORT = int(os.getenv("QQ_BRIDGE_PORT", "9876"))
 QQ_EXE = os.getenv("QQ_EXE", r"C:\Program Files\Tencent\QQNT\QQ.exe")
+QQ_EXE_CANDIDATES = [
+    QQ_EXE,
+    r"C:\Program Files\Tencent\QQNT\QQ.exe",
+    r"C:\Program Files\Tencent\QQ\QQ.exe",
+    r"C:\Program Files (x86)\Tencent\QQ\Bin\QQ.exe",
+]
 
 
 def json_response(handler: BaseHTTPRequestHandler, status: int, body: dict[str, Any]) -> None:
@@ -43,10 +50,14 @@ def read_json(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
 
 
 def open_qq() -> None:
-    if not os.path.exists(QQ_EXE):
-        raise FileNotFoundError(f"QQ_EXE not found: {QQ_EXE}")
+    executable = next((path for path in QQ_EXE_CANDIDATES if path and os.path.exists(path)), None)
+    if executable is None:
+        raise FileNotFoundError(
+            f"QQ_EXE not found: {QQ_EXE}. "
+            "Please set env QQ_EXE to your real QQ executable path, or open QQ manually before searching."
+        )
 
-    subprocess.Popen([QQ_EXE], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.Popen([executable], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def qq_windows() -> list[Any]:
@@ -70,6 +81,86 @@ def compact_control(control: Any) -> dict[str, str]:
         "controlType": info.control_type or "",
         "name": info.name or "",
     }
+
+
+def extract_qq_from_controls(query: str, limit: int = 220) -> str | None:
+    query_norm = query.strip()
+    candidates: dict[str, int] = {}
+    for window in qq_windows():
+        controls = window.descendants()[:limit]
+        for control in controls:
+            name = (control.element_info.name or "").strip()
+            if not name:
+                continue
+
+            for match in re.findall(r"\b\d{5,12}\b", name):
+                if match == query_norm:
+                    continue
+                candidates[match] = candidates.get(match, 0) + 1
+
+    if not candidates:
+        return None
+
+    sorted_candidates = sorted(candidates.items(), key=lambda item: item[1], reverse=True)
+    return sorted_candidates[0][0]
+
+
+def collect_candidates_from_controls(query: str, limit: int = 260) -> list[dict[str, Any]]:
+    query_norm = query.strip()
+    name_weight: dict[str, int] = {}
+    qq_weight: dict[str, int] = {}
+
+    for window in qq_windows():
+        controls = window.descendants()[:limit]
+        for control in controls:
+            info = control.element_info
+            name = (info.name or "").strip()
+            if not name:
+                continue
+
+            lowered = name.lower()
+            # Prefer text blocks likely tied to search results.
+            if any(keyword in lowered for keyword in ["搜索", "查找", "用户", "昵称", "账号", "qq"]):
+                name_weight[name] = name_weight.get(name, 0) + 2
+            else:
+                name_weight[name] = name_weight.get(name, 0) + 1
+
+            for qq in re.findall(r"\b\d{5,12}\b", name):
+                if qq == query_norm:
+                    continue
+                qq_weight[qq] = qq_weight.get(qq, 0) + 2
+
+    candidates: list[dict[str, Any]] = []
+    for qq, weight in sorted(qq_weight.items(), key=lambda item: item[1], reverse=True)[:10]:
+        candidates.append(
+            {
+                "qq": qq,
+                "name": "",
+                "avatarHash": "",
+                "signals": {"qqHits": weight, "nameHits": 0, "keywordHits": 1},
+                "source": "uia-controls",
+            }
+        )
+
+    top_names = [name for name, _ in sorted(name_weight.items(), key=lambda item: item[1], reverse=True)[:10]]
+    if not candidates and top_names:
+        for name in top_names:
+            candidates.append(
+                {
+                    "qq": "",
+                    "name": name,
+                    "avatarHash": "",
+                    "signals": {"qqHits": 0, "nameHits": 1, "keywordHits": 1},
+                    "source": "uia-controls",
+                }
+            )
+    elif top_names:
+        for index, candidate in enumerate(candidates):
+            if index < len(top_names):
+                candidate["name"] = top_names[index]
+                candidate["signals"]["nameHits"] = 1
+
+    return candidates[:10]
 
 
 def inspect_qq_controls(limit: int = 80) -> list[dict[str, str]]:
@@ -106,6 +197,19 @@ def find_search_control() -> Any | None:
     return None
 
 
+def focus_primary_qq_window() -> Any | None:
+    windows = qq_windows()
+    if not windows:
+        return None
+
+    window = windows[0]
+    try:
+        window.set_focus()
+    except Exception:
+        return None
+    return window
+
+
 def paste_text(value: str) -> None:
     if pyperclip is None or send_keys is None:
         raise RuntimeError("pyperclip/pywinauto keyboard is not installed. Run: pip install -r requirements.txt")
@@ -115,23 +219,53 @@ def paste_text(value: str) -> None:
 
 
 def run_uia_search(query: str) -> dict[str, Any]:
-    open_qq()
-    time.sleep(1)
+    # If QQ is already open, do not block on fixed install path.
+    if not qq_windows():
+        open_qq()
+        time.sleep(1)
 
     search_control = find_search_control()
     if search_control is None:
+        active_window = focus_primary_qq_window()
+        if active_window is None:
+            return {
+                "success": False,
+                "error": "未找到可聚焦的 QQ 窗口。",
+                "controls": inspect_qq_controls(40),
+            }
+
+        # QQ 新版 UIA 有时无法直接枚举搜索框，回退到 Ctrl+F 热键方案。
+        send_keys("^f")
+        time.sleep(0.2)
+        paste_text(query)
+        send_keys("{ENTER}")
+        time.sleep(0.8)
+        extracted_qq = extract_qq_from_controls(query)
+        candidates = collect_candidates_from_controls(query)
         return {
-            "success": False,
-            "error": "未找到 QQ 搜索框控件。请先调用 /inspect 查看 QQ UIA 控件树，并按真实控件特征适配。",
-            "controls": inspect_qq_controls(40),
+            "success": True,
+            "control": {
+                "autoId": "",
+                "className": "",
+                "controlType": "HotkeyFallback",
+                "name": "Ctrl+F fallback",
+            },
+            "mode": "hotkey-fallback",
+            "qq": extracted_qq,
+            "candidates": candidates,
         }
 
     search_control.set_focus()
     paste_text(query)
     send_keys("{ENTER}")
+    time.sleep(0.8)
+    extracted_qq = extract_qq_from_controls(query)
+    candidates = collect_candidates_from_controls(query)
     return {
         "success": True,
         "control": compact_control(search_control),
+        "qq": extracted_qq,
+        "candidates": candidates,
     }
 
 
@@ -218,6 +352,8 @@ class QQBridgeHandler(BaseHTTPRequestHandler):
                         "source": "Windows QQ Bridge",
                         "tags": ["本机QQ", "Bridge", "开通判定"],
                         "control": search_result.get("control"),
+                        "qq": search_result.get("qq"),
+                        "candidates": search_result.get("candidates", []),
                     },
                 )
                 return

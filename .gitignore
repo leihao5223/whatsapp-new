@@ -10,3 +10,17 @@ yarn-error.log*
 pnpm-debug.log*
 *.local
 *.tsbuildinfo
+.cache/
+desktop-bundle/
+release/
+electron-out-*/
+
+# Deploy secrets (never commit real accounts / encrypted targets)
+deploy/runner.env
+deploy/auth-users.json
+deploy/auth-users-for-friend.json
+
+*.rar
+**/__pycache__/
+
+/npm
