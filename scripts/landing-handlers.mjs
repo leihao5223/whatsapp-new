@@ -1,7 +1,10 @@
-import { mkdir, readFile, writeFile, readdir } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, readdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { randomInt } from 'node:crypto';
+import { join, normalize, resolve, dirname, relative } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { randomInt, randomBytes } from 'node:crypto';
+import busboy from 'busboy';
+import { unzipSync } from 'fflate';
 
 /** @typedef {{ userId: string; username: string; role: string; token?: string }} AuthCtx */
 
@@ -51,6 +54,7 @@ const defaultDoc = (userId) => ({
     historyIndex: 0,
     styleSendUsed: defaultUsed(),
   },
+  customTemplates: [],
 });
 
 const parseDomains = (text) => {
@@ -117,6 +121,9 @@ const ensureRuntimeShape = (doc) => {
   runtime.styleSendUsed = mergeUsed(runtime.styleSendUsed);
   if (!runtime.currentTemplateId) {
     runtime.currentTemplateId = 'gallery-aurora';
+  }
+  if (!Array.isArray(doc.customTemplates)) {
+    doc.customTemplates = [];
   }
 };
 
@@ -197,6 +204,417 @@ const pickRandomDomain = (domains) => {
   return line;
 };
 
+const MAX_ZIP_BYTES = 26 * 1024 * 1024;
+const MAX_UNZIP_TOTAL = 36 * 1024 * 1024;
+const MAX_USER_TEMPLATES = 24;
+const ALLOWED_ZIP_EXT = new Set([
+  '.html',
+  '.htm',
+  '.css',
+  '.js',
+  '.mjs',
+  '.json',
+  '.map',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.webp',
+  '.gif',
+  '.svg',
+  '.ico',
+  '.woff',
+  '.woff2',
+  '.ttf',
+  '.eot',
+  '.txt',
+  '.md',
+  '.xml',
+]);
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const sanitizeTemplateId = (id) => String(id ?? '').replace(/[^a-zA-Z0-9_-]/g, '') || '';
+
+const newTemplateId = () => `utpl_${randomBytes(8).toString('hex')}`;
+
+const userTemplateBase = (root, userId, templateId) =>
+  join(root, sanitizeUserId(userId), 'templates', sanitizeTemplateId(templateId));
+
+const safeZipRel = (raw) => {
+  const decoded = decodeURIComponent(String(raw ?? ''));
+  const n = normalize(decoded).replace(/^(\.\.(\/|\\|$))+/, '');
+  if (n.includes('..')) {
+    return null;
+  }
+  return n.replace(/^[\\/]+/, '');
+};
+
+const guessMime = (name) => {
+  const lower = String(name).toLowerCase();
+  if (lower.endsWith('.html') || lower.endsWith('.htm')) {
+    return 'text/html; charset=utf-8';
+  }
+  if (lower.endsWith('.css')) {
+    return 'text/css; charset=utf-8';
+  }
+  if (lower.endsWith('.js') || lower.endsWith('.mjs')) {
+    return 'text/javascript; charset=utf-8';
+  }
+  if (lower.endsWith('.json')) {
+    return 'application/json; charset=utf-8';
+  }
+  if (lower.endsWith('.png')) {
+    return 'image/png';
+  }
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
+    return 'image/jpeg';
+  }
+  if (lower.endsWith('.webp')) {
+    return 'image/webp';
+  }
+  if (lower.endsWith('.gif')) {
+    return 'image/gif';
+  }
+  if (lower.endsWith('.svg')) {
+    return 'image/svg+xml';
+  }
+  if (lower.endsWith('.ico')) {
+    return 'image/x-icon';
+  }
+  if (lower.endsWith('.woff2')) {
+    return 'font/woff2';
+  }
+  if (lower.endsWith('.woff')) {
+    return 'font/woff';
+  }
+  if (lower.endsWith('.ttf')) {
+    return 'font/ttf';
+  }
+  if (lower.endsWith('.txt') || lower.endsWith('.md')) {
+    return 'text/plain; charset=utf-8';
+  }
+  return 'application/octet-stream';
+};
+
+const validateRemoteUrl = (raw) => {
+  let u;
+  try {
+    u = new URL(String(raw ?? '').trim());
+  } catch {
+    return null;
+  }
+  if (!['http:', 'https:'].includes(u.protocol)) {
+    return null;
+  }
+  if (!u.host) {
+    return null;
+  }
+  return u.href;
+};
+
+const pickHtmlEntry = (names) => {
+  const norm = names.map((n) => String(n).replace(/\\/g, '/'));
+  const indexCandidates = norm.filter((n) => /(^|\/)index\.html$/i.test(n));
+  if (indexCandidates.length) {
+    indexCandidates.sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b));
+    return indexCandidates[0];
+  }
+  const htmls = norm.filter((n) => /\.html?$/i.test(n));
+  htmls.sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b));
+  return htmls[0] ?? null;
+};
+
+const unzipLandingZip = (buf) => {
+  const out = unzipSync(buf);
+  let total = 0;
+  /** @type {Record<string, Buffer>} */
+  const files = {};
+  for (const [rel, data] of Object.entries(out)) {
+    const relPosix = rel.replace(/\\/g, '/');
+    if (relPosix.endsWith('/')) {
+      continue;
+    }
+    const base = relPosix.split('/').pop() ?? '';
+    const ext = base.includes('.') ? `.${base.split('.').pop()?.toLowerCase() ?? ''}` : '';
+    if (!ALLOWED_ZIP_EXT.has(ext) && !/\.html?$/i.test(base)) {
+      continue;
+    }
+    if (relPosix.includes('..')) {
+      continue;
+    }
+    total += data.byteLength;
+    if (total > MAX_UNZIP_TOTAL) {
+      throw new Error('ZIP expands too large');
+    }
+    files[relPosix] = Buffer.from(data);
+  }
+  if (!Object.keys(files).length) {
+    throw new Error('No usable files in ZIP (need HTML/CSS/JS/assets)');
+  }
+  return files;
+};
+
+const readZipMultipart = (req) =>
+  new Promise((resolve, reject) => {
+    const bb = busboy({ headers: req.headers, limits: { fileSize: MAX_ZIP_BYTES } });
+    /** @type {Buffer | null} */
+    let zipBuf = null;
+    let displayName = 'ZIP 模板';
+    bb.on('field', (name, val) => {
+      if (name === 'name') {
+        displayName = String(val).trim().slice(0, 80) || displayName;
+      }
+    });
+    bb.on('file', (fieldname, file) => {
+      if (fieldname !== 'file') {
+        file.resume();
+        return;
+      }
+      const chunks = [];
+      file.on('data', (d) => chunks.push(d));
+      file.on('limit', () => reject(new Error('ZIP exceeds size limit')));
+      file.on('error', reject);
+      file.on('end', () => {
+        zipBuf = Buffer.concat(chunks);
+      });
+    });
+    bb.on('error', reject);
+    bb.on('finish', () => {
+      if (!zipBuf || zipBuf.length < 22) {
+        reject(new Error('Missing or empty ZIP'));
+        return;
+      }
+      resolve({ zipBuf, displayName });
+    });
+    req.pipe(bb);
+  });
+
+/**
+ * @param {object} ctx
+ * @returns {Promise<boolean>}
+ */
+async function matchLandingTemplateRoutes({ req, res, pathname, method, root, effectiveUserId, sendJson, readBody }) {
+  if (!pathname.startsWith('/landing/templates')) {
+    return false;
+  }
+
+  const coverMatch = pathname.match(/^\/landing\/templates\/([^/]+)\/cover\.png$/);
+  if (method === 'GET' && coverMatch) {
+    const tid = sanitizeTemplateId(coverMatch[1]);
+    if (!tid.startsWith('utpl_')) {
+      sendJson(res, 404, { success: false, error: 'Not found' });
+      return true;
+    }
+    const doc = await loadDoc(root, effectiveUserId);
+    const meta = (doc.customTemplates || []).find((t) => t.id === tid);
+    if (!meta) {
+      sendJson(res, 404, { success: false, error: 'Template not found' });
+      return true;
+    }
+    const p = join(userTemplateBase(root, effectiveUserId, tid), 'cover.png');
+    if (!existsSync(p)) {
+      sendJson(res, 404, { success: false, error: 'No cover yet' });
+      return true;
+    }
+    const buf = await readFile(p);
+    res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'private, max-age=120' });
+    res.end(buf);
+    return true;
+  }
+
+  const filesMatch = pathname.match(/^\/landing\/templates\/([^/]+)\/files\/(.*)$/);
+  if (method === 'GET' && filesMatch) {
+    const tid = sanitizeTemplateId(filesMatch[1]);
+    const relRaw = filesMatch[2] ?? '';
+    const rel = safeZipRel(relRaw);
+    if (!tid.startsWith('utpl_') || !rel) {
+      sendJson(res, 400, { success: false, error: 'Bad path' });
+      return true;
+    }
+    const doc = await loadDoc(root, effectiveUserId);
+    const meta = (doc.customTemplates || []).find((t) => t.id === tid);
+    if (!meta || meta.source !== 'zip') {
+      sendJson(res, 404, { success: false, error: 'Template not found' });
+      return true;
+    }
+    const baseResolved = resolve(userTemplateBase(root, effectiveUserId, tid));
+    const absResolved = resolve(join(baseResolved, rel));
+    const relToBase = relative(baseResolved, absResolved);
+    if (!relToBase || relToBase.startsWith('..') || relToBase.split(/[/\\]/).includes('..')) {
+      sendJson(res, 403, { success: false, error: 'Forbidden path' });
+      return true;
+    }
+    if (!existsSync(absResolved)) {
+      sendJson(res, 404, { success: false, error: 'File not found' });
+      return true;
+    }
+    const buf = await readFile(absResolved);
+    res.writeHead(200, { 'Content-Type': guessMime(rel), 'Cache-Control': 'private, max-age=120' });
+    res.end(buf);
+    return true;
+  }
+
+  if (method === 'POST' && pathname === '/landing/templates/from-zip') {
+    let zipBuf;
+    let displayName;
+    try {
+      ({ zipBuf, displayName } = await readZipMultipart(req));
+    } catch (e) {
+      sendJson(res, 400, { success: false, error: String(e?.message ?? e) });
+      return true;
+    }
+    const sig = zipBuf.subarray(0, 4).toString('hex');
+    if (sig !== '504b0304' && sig !== '504b0506' && sig !== '504b0708') {
+      sendJson(res, 400, { success: false, error: 'Not a ZIP file' });
+      return true;
+    }
+    /** @type {Record<string, Buffer>} */
+    let extracted;
+    try {
+      extracted = unzipLandingZip(zipBuf);
+    } catch (e) {
+      sendJson(res, 400, { success: false, error: String(e?.message ?? e) });
+      return true;
+    }
+    const entry = pickHtmlEntry(Object.keys(extracted));
+    if (!entry) {
+      sendJson(res, 400, { success: false, error: 'No HTML entry in ZIP' });
+      return true;
+    }
+    const doc = await loadDoc(root, effectiveUserId);
+    if ((doc.customTemplates || []).length >= MAX_USER_TEMPLATES) {
+      sendJson(res, 400, { success: false, error: `Each user can have at most ${MAX_USER_TEMPLATES} custom templates` });
+      return true;
+    }
+    const id = newTemplateId();
+    const dir = userTemplateBase(root, effectiveUserId, id);
+    await mkdir(dir, { recursive: true });
+    for (const [rel, data] of Object.entries(extracted)) {
+      const dest = join(dir, rel);
+      await mkdir(dirname(dest), { recursive: true });
+      await writeFile(dest, data);
+    }
+    doc.customTemplates = [...(doc.customTemplates || []), { id, name: displayName, source: 'zip', entry, coverCaptured: false }];
+    doc.runtime.currentTemplateId = id;
+    await saveDoc(root, doc);
+    sendJson(res, 200, { success: true, data: { doc, templateId: id } });
+    return true;
+  }
+
+  if (method === 'POST' && pathname === '/landing/templates/from-url') {
+    const body = JSON.parse((await readBody(req)) || '{}');
+    const name = String(body.name ?? '链接模板').trim().slice(0, 80) || '链接模板';
+    const urlOk = validateRemoteUrl(body.url);
+    if (!urlOk) {
+      sendJson(res, 400, { success: false, error: 'Invalid http(s) URL' });
+      return true;
+    }
+    const doc = await loadDoc(root, effectiveUserId);
+    if ((doc.customTemplates || []).length >= MAX_USER_TEMPLATES) {
+      sendJson(res, 400, { success: false, error: `Each user can have at most ${MAX_USER_TEMPLATES} custom templates` });
+      return true;
+    }
+    const id = newTemplateId();
+    doc.customTemplates = [
+      ...(doc.customTemplates || []),
+      { id, name, source: 'url', remoteUrl: urlOk, entry: '', coverCaptured: false },
+    ];
+    doc.runtime.currentTemplateId = id;
+    await saveDoc(root, doc);
+    sendJson(res, 200, { success: true, data: { doc, templateId: id } });
+    return true;
+  }
+
+  const captureMatch = pathname.match(/^\/landing\/templates\/([^/]+)\/capture$/);
+  if (method === 'POST' && captureMatch) {
+    const tid = sanitizeTemplateId(captureMatch[1]);
+    if (!tid.startsWith('utpl_')) {
+      sendJson(res, 400, { success: false, error: 'Bad template id' });
+      return true;
+    }
+    const doc = await loadDoc(root, effectiveUserId);
+    const idx = (doc.customTemplates || []).findIndex((t) => t.id === tid);
+    if (idx < 0) {
+      sendJson(res, 404, { success: false, error: 'Template not found' });
+      return true;
+    }
+    const meta = doc.customTemplates[idx];
+    if (meta.coverCaptured && existsSync(join(userTemplateBase(root, effectiveUserId, tid), 'cover.png'))) {
+      sendJson(res, 200, { success: true, data: { doc, skipped: true } });
+      return true;
+    }
+    const outPng = join(userTemplateBase(root, effectiveUserId, tid), 'cover.png');
+    /** @type {import('playwright').Browser | undefined} */
+    let browser;
+    try {
+      const { chromium } = await import('playwright');
+      browser = await chromium.launch({ headless: true });
+      const page = await browser.newPage({ viewport: { width: 390, height: 720 } });
+      let target = '';
+      if (meta.source === 'url' && meta.remoteUrl) {
+        target = meta.remoteUrl;
+      } else if (meta.source === 'zip' && meta.entry) {
+        const baseDir = resolve(userTemplateBase(root, effectiveUserId, tid));
+        const absHtml = resolve(join(baseDir, meta.entry));
+        const relCheck = relative(baseDir, absHtml);
+        if (!relCheck || relCheck.startsWith('..') || relCheck.split(/[/\\]/).includes('..')) {
+          throw new Error('Bad entry path');
+        }
+        target = pathToFileURL(absHtml).href;
+      } else {
+        throw new Error('Template has no preview target');
+      }
+      await page.goto(target, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+      await sleep(1600);
+      await page.screenshot({ path: outPng, type: 'png', fullPage: false });
+    } catch (e) {
+      sendJson(res, 500, { success: false, error: `Screenshot failed: ${String(e?.message ?? e)}` });
+      return true;
+    } finally {
+      if (browser) {
+        try {
+          await browser.close();
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    doc.customTemplates[idx].coverCaptured = true;
+    await saveDoc(root, doc);
+    const fresh = await loadDoc(root, effectiveUserId);
+    sendJson(res, 200, { success: true, data: { doc: fresh } });
+    return true;
+  }
+
+  const deleteMatch = pathname.match(/^\/landing\/templates\/([^/]+)$/);
+  if (method === 'DELETE' && deleteMatch) {
+    const tid = sanitizeTemplateId(deleteMatch[1]);
+    if (!tid.startsWith('utpl_')) {
+      sendJson(res, 400, { success: false, error: 'Bad template id' });
+      return true;
+    }
+    const doc = await loadDoc(root, effectiveUserId);
+    const before = (doc.customTemplates || []).length;
+    doc.customTemplates = (doc.customTemplates || []).filter((t) => t.id !== tid);
+    if (doc.customTemplates.length === before) {
+      sendJson(res, 404, { success: false, error: 'Template not found' });
+      return true;
+    }
+    if (doc.runtime.currentTemplateId === tid) {
+      doc.runtime.currentTemplateId = 'gallery-aurora';
+    }
+    const dir = userTemplateBase(root, effectiveUserId, tid);
+    if (existsSync(dir)) {
+      await rm(dir, { recursive: true, force: true });
+    }
+    await saveDoc(root, doc);
+    sendJson(res, 200, { success: true, data: { doc } });
+    return true;
+  }
+
+  return false;
+}
+
 /**
  * @param {object} opts
  * @param {import('node:http').IncomingMessage} opts.req
@@ -258,6 +676,10 @@ export async function handleLandingRequest({ req, res, pathname, method, readBod
   }
 
   const effectiveUserId = auth.userId;
+
+  if (await matchLandingTemplateRoutes({ req, res, pathname, method, root, effectiveUserId, sendJson, readBody })) {
+    return true;
+  }
 
   if (method === 'GET' && pathname === '/landing/profile') {
     const doc = await loadDoc(root, effectiveUserId);

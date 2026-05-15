@@ -1,9 +1,12 @@
-import { Download, ChevronLeft, ChevronRight, Printer, Send, RefreshCw } from 'lucide-react';
+import { Download, ChevronLeft, ChevronRight, Printer, Send, RefreshCw, Trash2, Upload } from 'lucide-react';
 import type { ChangeEvent } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { buildLandingHtml } from './buildHtml';
 import {
   fetchLogoDataUrl,
+  landingAddTemplateUrl,
+  landingCaptureTemplate,
+  landingDeleteTemplate,
   landingGetProfile,
   landingLayoutNext,
   landingLayoutPrev,
@@ -11,6 +14,7 @@ import {
   landingPutSettings,
   landingSendNext,
   landingSendSimulate,
+  landingUploadTemplateZip,
 } from './client';
 import { LANDING_GALLERY, LANDING_STYLE_IDS } from './templateCatalog';
 import type { LandingButtonType, LandingDoc } from './types';
@@ -19,6 +23,16 @@ type Props = {
   runtimeBaseUrl: string;
   authToken?: string;
 };
+
+const joinRuntime = (base: string, path: string) => `${String(base).replace(/\/+$/, '')}${path.startsWith('/') ? path : `/${path}`}`;
+
+const posixZipEntryForUrl = (entry: string) =>
+  String(entry || 'index.html')
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter(Boolean)
+    .map((s) => encodeURIComponent(s))
+    .join('/');
 
 const defaultDoc = (): LandingDoc => ({
   version: 1,
@@ -47,6 +61,7 @@ const defaultDoc = (): LandingDoc => ({
     historyIndex: 0,
     styleSendUsed: Object.fromEntries(LANDING_STYLE_IDS.map((id) => [id, 0])) as Record<string, number>,
   },
+  customTemplates: [],
 });
 
 export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
@@ -54,12 +69,37 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
   const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
+  const [urlTplName, setUrlTplName] = useState('外链模板');
+  const [urlTplUrl, setUrlTplUrl] = useState('');
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const zipTemplateInputRef = useRef<HTMLInputElement>(null);
+
+  const customList = doc?.customTemplates ?? [];
+
+  const selectedCustom = useMemo(
+    () => doc?.customTemplates?.find((x) => x.id === doc?.runtime.currentTemplateId),
+    [doc?.customTemplates, doc?.runtime.currentTemplateId],
+  );
+  const needsTemplateCapture = Boolean(selectedCustom && !selectedCustom.coverCaptured);
 
   const accentHex = useMemo(() => {
     const g = LANDING_GALLERY.find((item) => item.id === doc?.runtime.currentTemplateId);
     return g?.accent ?? '#22d3ee';
   }, [doc?.runtime.currentTemplateId]);
+
+  const previewRemoteSrc = useMemo(() => {
+    if (!authToken || !selectedCustom) {
+      return null;
+    }
+    if (selectedCustom.source === 'url' && selectedCustom.remoteUrl) {
+      return selectedCustom.remoteUrl;
+    }
+    if (selectedCustom.source === 'zip' && selectedCustom.entry) {
+      const path = posixZipEntryForUrl(selectedCustom.entry);
+      return `${joinRuntime(runtimeBaseUrl, `/landing/templates/${selectedCustom.id}/files/${path}`)}?access_token=${encodeURIComponent(authToken)}`;
+    }
+    return null;
+  }, [authToken, runtimeBaseUrl, selectedCustom]);
 
   const refreshLogo = useCallback(async () => {
     if (!authToken) {
@@ -94,12 +134,46 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
     void load();
   }, [load]);
 
+  const skipCaptureUntilReselect = useRef(false);
+  useEffect(() => {
+    skipCaptureUntilReselect.current = false;
+  }, [doc?.runtime.currentTemplateId]);
+
+  useEffect(() => {
+    if (!authToken || !doc || !needsTemplateCapture || skipCaptureUntilReselect.current || !selectedCustom) {
+      return;
+    }
+    let cancelled = false;
+    setBusy(true);
+    void (async () => {
+      const r = await landingCaptureTemplate(runtimeBaseUrl, authToken, selectedCustom.id);
+      if (cancelled) {
+        return;
+      }
+      if (!r.success) {
+        skipCaptureUntilReselect.current = true;
+        setNotice(r.error ?? '首页截图失败，请换模板再选回重试');
+        setBusy(false);
+        return;
+      }
+      if (r.data?.doc) {
+        setDoc(r.data.doc);
+      } else {
+        await load();
+      }
+      setBusy(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authToken, doc, load, needsTemplateCapture, runtimeBaseUrl, selectedCustom]);
+
   const previewSrcDoc = useMemo(() => {
-    if (!doc) {
+    if (!doc || previewRemoteSrc) {
       return '';
     }
     return buildLandingHtml({ doc, logoDataUrl, accentHex });
-  }, [doc, logoDataUrl, accentHex]);
+  }, [doc, logoDataUrl, accentHex, previewRemoteSrc]);
 
   const saveProfile = async (patch: Record<string, unknown>) => {
     if (!authToken || !doc) {
@@ -185,6 +259,10 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
     if (!doc) {
       return;
     }
+    if (previewRemoteSrc) {
+      setNotice('当前为上传 ZIP 或外链模板：请直接使用 ZIP 内源文件，或在目标站点另存页面。');
+      return;
+    }
     const html = buildLandingHtml({ doc, logoDataUrl, accentHex });
     const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -193,6 +271,26 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
     a.download = `landing-${Date.now()}.html`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const onDeleteCurrentCustomTemplate = async () => {
+    const t = selectedCustom;
+    if (!t || !authToken) {
+      return;
+    }
+    if (!window.confirm(`删除当前模板「${t.name}」？删除后不可恢复。`)) {
+      return;
+    }
+    setBusy(true);
+    setNotice('');
+    const r = await landingDeleteTemplate(runtimeBaseUrl, authToken, t.id);
+    if (!r.success || !r.data?.doc) {
+      setNotice(r.error ?? '删除失败');
+    } else {
+      setDoc(r.data.doc);
+      setNotice('已删除模板');
+    }
+    setBusy(false);
   };
 
   const onLogoFile = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -246,47 +344,55 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
             </div>
           </div>
           <div className="landing-generator-form">
-            <label className="landing-field-label">项目名</label>
-            <input value={doc.profile.projectName} onChange={(e) => setDoc({ ...doc, profile: { ...doc.profile, projectName: e.target.value } })} />
-            <label className="landing-field-label">公司类型</label>
-            <input value={doc.profile.companyType} onChange={(e) => setDoc({ ...doc, profile: { ...doc.profile, companyType: e.target.value } })} />
-            <label className="landing-field-label">Logo（PNG）</label>
-            <input type="file" accept="image/png" onChange={(e) => void onLogoFile(e)} />
-            <label className="landing-field-label">按钮类型</label>
-            <select
-              value={doc.profile.buttonType}
-              onChange={(e) =>
-                setDoc({
-                  ...doc,
-                  profile: { ...doc.profile, buttonType: e.target.value as LandingButtonType },
-                })
-              }
-            >
-              <option value="app">APP 下载</option>
-              <option value="service">跳转客服</option>
-              <option value="site">跳转官网</option>
-            </select>
-            {doc.profile.buttonType === 'app' ? (
-              <input
-                placeholder="应用包 / 商店链接"
-                value={doc.profile.appDownloadUrl}
-                onChange={(e) => setDoc({ ...doc, profile: { ...doc.profile, appDownloadUrl: e.target.value } })}
-              />
-            ) : null}
-            {doc.profile.buttonType === 'service' ? (
-              <input
-                placeholder="客服链接（WhatsApp / 企微等）"
-                value={doc.profile.serviceUrl}
-                onChange={(e) => setDoc({ ...doc, profile: { ...doc.profile, serviceUrl: e.target.value } })}
-              />
-            ) : null}
-            {doc.profile.buttonType === 'site' ? (
-              <input
-                placeholder="官网 URL"
-                value={doc.profile.siteUrl}
-                onChange={(e) => setDoc({ ...doc, profile: { ...doc.profile, siteUrl: e.target.value } })}
-              />
-            ) : null}
+            <div className="landing-glass-field">
+              <label className="landing-field-label">项目名</label>
+              <input value={doc.profile.projectName} onChange={(e) => setDoc({ ...doc, profile: { ...doc.profile, projectName: e.target.value } })} />
+            </div>
+            <div className="landing-glass-field">
+              <label className="landing-field-label">公司类型</label>
+              <input value={doc.profile.companyType} onChange={(e) => setDoc({ ...doc, profile: { ...doc.profile, companyType: e.target.value } })} />
+            </div>
+            <div className="landing-glass-field">
+              <label className="landing-field-label">Logo（PNG）</label>
+              <input type="file" accept="image/png" onChange={(e) => void onLogoFile(e)} />
+            </div>
+            <div className="landing-glass-field">
+              <label className="landing-field-label">按钮类型</label>
+              <select
+                value={doc.profile.buttonType}
+                onChange={(e) =>
+                  setDoc({
+                    ...doc,
+                    profile: { ...doc.profile, buttonType: e.target.value as LandingButtonType },
+                  })
+                }
+              >
+                <option value="app">APP 下载</option>
+                <option value="service">跳转客服</option>
+                <option value="site">跳转官网</option>
+              </select>
+              {doc.profile.buttonType === 'app' ? (
+                <input
+                  placeholder="应用包 / 商店链接"
+                  value={doc.profile.appDownloadUrl}
+                  onChange={(e) => setDoc({ ...doc, profile: { ...doc.profile, appDownloadUrl: e.target.value } })}
+                />
+              ) : null}
+              {doc.profile.buttonType === 'service' ? (
+                <input
+                  placeholder="客服链接（WhatsApp / 企微等）"
+                  value={doc.profile.serviceUrl}
+                  onChange={(e) => setDoc({ ...doc, profile: { ...doc.profile, serviceUrl: e.target.value } })}
+                />
+              ) : null}
+              {doc.profile.buttonType === 'site' ? (
+                <input
+                  placeholder="官网 URL"
+                  value={doc.profile.siteUrl}
+                  onChange={(e) => setDoc({ ...doc, profile: { ...doc.profile, siteUrl: e.target.value } })}
+                />
+              ) : null}
+            </div>
           </div>
           <div className="action-row">
             <button type="button" className="run-button" disabled={busy} onClick={() => void saveProfile({ ...doc.profile })}>
@@ -303,16 +409,47 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
             </div>
           </div>
           <p className="muted-copy landing-preview-meta">
-            当前版式：<strong>{frame.styleId}</strong> · seed {frame.seed}
+            {selectedCustom ? (
+              <>
+                当前模板：<strong>{selectedCustom.name}</strong>（{selectedCustom.source === 'url' ? '外链复刻' : 'ZIP 包'}）
+              </>
+            ) : (
+              <>
+                当前版式：<strong>{frame.styleId}</strong> · seed {frame.seed}
+              </>
+            )}
           </p>
           <div className="landing-preview-frame-wrap landing-preview-frame-wrap--tall">
-            <iframe ref={iframeRef} className="landing-preview-frame" title="landing-preview" srcDoc={previewSrcDoc} sandbox="allow-same-origin allow-modals" />
+            {previewRemoteSrc ? (
+              <iframe
+                key={`ext-${selectedCustom?.id ?? 'x'}`}
+                ref={iframeRef}
+                className="landing-preview-frame"
+                title="landing-preview"
+                src={previewRemoteSrc}
+                sandbox={
+                  selectedCustom?.source === 'url'
+                    ? 'allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals'
+                    : 'allow-scripts allow-same-origin allow-forms allow-popups allow-modals'
+                }
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <iframe
+                key="sys"
+                ref={iframeRef}
+                className="landing-preview-frame"
+                title="landing-preview"
+                srcDoc={previewSrcDoc}
+                sandbox="allow-same-origin allow-modals"
+              />
+            )}
           </div>
           <div className="landing-preview-toolbar">
-            <button type="button" className="soft-button" disabled={busy} onClick={() => void onLayoutPrev()}>
+            <button type="button" className="soft-button" disabled={busy || !!selectedCustom} onClick={() => void onLayoutPrev()}>
               <ChevronLeft size={16} /> 返回上一版式
             </button>
-            <button type="button" className="run-button" disabled={busy} onClick={() => void onLayoutNext()}>
+            <button type="button" className="run-button" disabled={busy || !!selectedCustom} onClick={() => void onLayoutNext()}>
               切换新版式 <ChevronRight size={16} />
             </button>
             {doc.settings.pdfPresentation ? (
@@ -430,28 +567,137 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
       </div>
 
       <section className="panel settings-panel landing-gallery">
-        <div className="panel__header compact">
+        <div className="panel__header compact landing-gallery-header">
           <div>
             <p className="section-kicker">Gallery</p>
             <h2>模板图册</h2>
           </div>
-        </div>
-        <div className="landing-gallery-strip">
-          {LANDING_GALLERY.map((item) => (
+          <div className="landing-gallery-header-actions">
+            <input
+              ref={zipTemplateInputRef}
+              type="file"
+              accept=".zip,application/zip"
+              className="landing-gallery-file-hidden"
+              aria-hidden
+              tabIndex={-1}
+              onChange={(e) => {
+                void (async () => {
+                  const file = e.target.files?.[0];
+                  e.target.value = '';
+                  if (!file || !authToken) {
+                    return;
+                  }
+                  setBusy(true);
+                  setNotice('');
+                  const r = await landingUploadTemplateZip(runtimeBaseUrl, authToken, file, file.name.replace(/\.zip$/i, ''));
+                  if (!r.success || !r.data?.doc) {
+                    setNotice(r.error ?? 'ZIP 上传失败');
+                  } else {
+                    setDoc(r.data.doc);
+                    setNotice('已添加 ZIP 模板，正在打开并生成封面…');
+                  }
+                  setBusy(false);
+                })();
+              }}
+            />
             <button
-              key={item.id}
               type="button"
-              className={`landing-gallery-card ${doc.runtime.currentTemplateId === item.id ? 'landing-gallery-card--active' : ''}`}
+              className="run-button"
+              disabled={busy}
+              onClick={() => zipTemplateInputRef.current?.click()}
+            >
+              <Upload size={16} /> 上传模板
+            </button>
+            <button
+              type="button"
+              className="soft-button landing-gallery-delete-template"
+              disabled={busy || !selectedCustom}
+              title={selectedCustom ? '删除当前选中的自定义模板' : '请先在下方图册中选中一个自定义模板（ZIP 或链接）'}
+              onClick={() => void onDeleteCurrentCustomTemplate()}
+            >
+              <Trash2 size={16} /> 删除模板
+            </button>
+          </div>
+        </div>
+
+        <div className="landing-gallery-link-panel">
+          <p className="landing-gallery-link-intro">添加方式二选一：上传 ZIP 包，或填写链接后按该网页样式在预览中复刻（iframe）。</p>
+          <div className="landing-gallery-link-row">
+            <input placeholder="模板名称" value={urlTplName} onChange={(e) => setUrlTplName(e.target.value)} />
+            <input className="landing-gallery-link-url" placeholder="https://example.com/..." value={urlTplUrl} onChange={(e) => setUrlTplUrl(e.target.value)} />
+            <button
+              type="button"
+              className="run-button"
+              disabled={busy}
               onClick={() => {
-                setDoc({ ...doc, runtime: { ...doc.runtime, currentTemplateId: item.id } });
-                void saveProfile({ currentTemplateId: item.id });
+                void (async () => {
+                  if (!authToken) {
+                    return;
+                  }
+                  setBusy(true);
+                  setNotice('');
+                  const r = await landingAddTemplateUrl(runtimeBaseUrl, authToken, urlTplName.trim() || '外链模板', urlTplUrl.trim());
+                  if (!r.success || !r.data?.doc) {
+                    setNotice(r.error ?? '添加链接失败');
+                  } else {
+                    setDoc(r.data.doc);
+                    setUrlTplUrl('');
+                    setNotice('已按链接添加模板，预览将复刻该页样式');
+                  }
+                  setBusy(false);
+                })();
               }}
             >
-              <div className="landing-gallery-thumb" style={{ background: item.thumb }} />
-              <strong>{item.name}</strong>
-              <small>{item.accent}</small>
+              添加链接模板
             </button>
-          ))}
+          </div>
+          <p className="muted-copy landing-gallery-scroll-hint">下方模板卡片区域可<strong>左右滑动</strong>查看更多；首次选中自定义模板会自动截取首页作为封面。</p>
+        </div>
+
+        <div className="landing-gallery-scroll" role="region" aria-label="模板列表，可横向滚动">
+          <div className="landing-gallery-strip">
+            {LANDING_GALLERY.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`landing-gallery-card ${doc.runtime.currentTemplateId === item.id ? 'landing-gallery-card--active' : ''}`}
+                onClick={() => {
+                  setDoc({ ...doc, runtime: { ...doc.runtime, currentTemplateId: item.id } });
+                  void saveProfile({ currentTemplateId: item.id });
+                }}
+              >
+                <div className="landing-gallery-thumb" style={{ background: item.thumb }} />
+                <strong>{item.name}</strong>
+                <small>{item.accent}</small>
+              </button>
+            ))}
+            {customList.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`landing-gallery-card landing-gallery-card--custom ${doc.runtime.currentTemplateId === item.id ? 'landing-gallery-card--active' : ''}`}
+                onClick={() => {
+                  setDoc({ ...doc, runtime: { ...doc.runtime, currentTemplateId: item.id } });
+                  void saveProfile({ currentTemplateId: item.id });
+                }}
+              >
+                <div
+                  className="landing-gallery-thumb"
+                  style={
+                    item.coverCaptured && authToken
+                      ? {
+                          backgroundImage: `url("${joinRuntime(runtimeBaseUrl, `/landing/templates/${item.id}/cover.png`)}?access_token=${encodeURIComponent(authToken)}")`,
+                          backgroundSize: 'cover',
+                          backgroundPosition: 'top center',
+                        }
+                      : { background: 'linear-gradient(135deg,#0f172a,#475569)' }
+                  }
+                />
+                <strong>{item.name}</strong>
+                <small>{item.source === 'url' ? '链接复刻' : 'ZIP'}</small>
+              </button>
+            ))}
+          </div>
         </div>
       </section>
     </div>

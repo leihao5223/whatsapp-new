@@ -12,7 +12,7 @@ import { handleLandingRequest } from './landing-handlers.mjs';
 const jsonHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Runner-Token',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
   'Content-Type': 'application/json; charset=utf-8',
 };
 
@@ -713,6 +713,15 @@ const extractBearerToken = (req) => {
   const authHeader = req.headers.authorization;
   if (typeof authHeader === 'string' && authHeader.toLowerCase().startsWith('bearer ')) {
     return authHeader.slice(7).trim();
+  }
+  const rawUrl = typeof req.url === 'string' ? req.url : '';
+  const qIndex = rawUrl.indexOf('?');
+  if (qIndex >= 0) {
+    const sp = new URLSearchParams(rawUrl.slice(qIndex + 1));
+    const qtok = sp.get('access_token');
+    if (qtok) {
+      return qtok.trim();
+    }
   }
   return '';
 };

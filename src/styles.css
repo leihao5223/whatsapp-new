@@ -371,6 +371,13 @@ button:disabled {
 :root {
   color: #122033;
   background: #f5f7fb;
+  /* 全局表单「明信片」：白底、黑框、右下硬阴影、直角 */
+  --postcard-field-bg: #ffffff;
+  --postcard-field-border: #000000;
+  --postcard-field-shadow: 3px 3px 0 0 #000000;
+  --postcard-field-text: #000000;
+  --postcard-field-placeholder: rgba(0, 0, 0, 0.42);
+  --postcard-field-focus-ring: 0 0 0 2px rgba(0, 0, 0, 0.12);
 }
 
 body {
@@ -405,9 +412,7 @@ body {
 
 .queue-item,
 .port-mini-list div,
-.manual-entry,
-.runtime-form input,
-.batch-input {
+.manual-entry {
   border-color: #dbe5ef;
   color: #132238;
   background: #ffffff;
@@ -704,10 +709,6 @@ td small {
 
 .manual-entry input {
   width: 100%;
-  border: 0;
-  outline: 0;
-  color: #e6fffb;
-  background: transparent;
 }
 
 .control-row {
@@ -1061,16 +1062,10 @@ th {
 
 .qq-login-form input {
   min-height: 42px;
-  border: 1px solid rgba(222, 255, 249, 0.16);
-  border-radius: 12px;
-  outline: none;
-  padding: 0 12px;
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.08);
 }
 
 .qq-login-form input::placeholder {
-  color: rgba(222, 255, 249, 0.44);
+  color: var(--postcard-field-placeholder) !important;
 }
 
 .login-feedback {
@@ -1442,29 +1437,12 @@ th {
 
 .runtime-form input {
   min-height: 42px;
-  border: 1px solid rgba(163, 230, 223, 0.24);
-  border-radius: 12px;
-  outline: none;
-  padding: 0 13px;
-  color: #e6fffb;
-  background: rgba(2, 37, 39, 0.62);
-}
-
-.runtime-form input:focus {
-  border-color: rgba(142, 255, 236, 0.55);
-  box-shadow: 0 0 0 4px rgba(93, 255, 176, 0.12);
 }
 
 .batch-input {
   min-height: 120px;
   width: 100%;
-  border: 1px solid rgba(163, 230, 223, 0.24);
-  border-radius: 12px;
-  outline: none;
-  padding: 10px 12px;
   resize: vertical;
-  color: #e6fffb;
-  background: rgba(2, 37, 39, 0.62);
 }
 
 .runtime-status {
@@ -1586,12 +1564,8 @@ th {
   box-shadow: 0 24px 54px rgba(3, 23, 25, 0.45);
 }
 
-.task-modal .batch-input,
-.task-modal input,
-.task-modal select {
-  border: 1px solid rgba(163, 230, 223, 0.24);
-  color: #e6fffb;
-  background: rgba(2, 37, 39, 0.62);
+.task-modal .batch-input {
+  min-height: 100px;
 }
 
 .task-board {
@@ -1700,11 +1674,6 @@ th {
 .proxy-form-grid input,
 .proxy-form-grid select {
   min-height: 40px;
-  border: 1px solid #cbd5e1;
-  border-radius: 10px;
-  padding: 0 10px;
-  color: #0f172a;
-  background: #ffffff;
 }
 
 .proxy-host-port {
@@ -1846,16 +1815,11 @@ th {
 .port-card__input,
 .port-card__select {
   min-height: 28px;
-  border: 1px solid rgba(163, 230, 223, 0.24);
-  border-radius: 10px;
-  padding: 0 7px;
-  color: #e6fffb;
   font-size: 0.72rem;
-  background: rgba(2, 37, 39, 0.62);
 }
 
 .port-card__input::placeholder {
-  color: rgba(215, 255, 247, 0.45);
+  color: var(--postcard-field-placeholder) !important;
 }
 
 .port-card__actions {
@@ -1956,45 +1920,7 @@ textarea::placeholder {
   color: rgba(255, 255, 255, 0.72) !important;
 }
 
-/* Login: inputs must stay readable (global white text + light inputs = invisible) */
-.login-card input,
-.login-shell input {
-  color: #e6fffb !important;
-  background: rgba(2, 37, 39, 0.78) !important;
-  border: 1px solid rgba(163, 230, 223, 0.35) !important;
-  border-radius: 12px;
-  min-height: 42px;
-  padding: 0 12px;
-}
-
-.login-card input::placeholder,
-.login-shell input::placeholder {
-  color: rgba(255, 255, 255, 0.5) !important;
-}
-
-/* 落地页：白底表单区文字改深色（覆盖上方全局白字） */
-.landing-page-root input:not([type='checkbox']):not([type='radio']),
-.landing-page-root select,
-.landing-page-root textarea {
-  color: #0f172a !important;
-  background: #ffffff !important;
-  border-color: #cbd5e1 !important;
-}
-
-.landing-page-root option {
-  color: #0f172a !important;
-  background: #ffffff !important;
-}
-
-.landing-page-root input[type='file'] {
-  color: #0f172a !important;
-}
-
-.landing-page-root input::placeholder,
-.landing-page-root textarea::placeholder {
-  color: rgba(15, 23, 42, 0.48) !important;
-}
-
+/* 落地页：标签与说明在浅底面板上用深色（控件外观由文末「明信片」全局块统一） */
 .landing-page-root .landing-field-label,
 .landing-page-root .landing-check span,
 .landing-page-root .landing-preview-meta,
@@ -2021,6 +1947,29 @@ textarea::placeholder {
   display: grid;
   gap: 12px;
   margin-top: 8px;
+}
+
+.landing-page-root .landing-glass-field {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px 16px;
+  border-radius: 22px;
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05));
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -1px 0 rgba(2, 12, 18, 0.15),
+    0 10px 36px rgba(2, 18, 22, 0.42);
+  isolation: isolate;
+}
+
+.landing-page-root .landing-glass-field > .landing-field-label {
+  margin: 0 !important;
+  color: rgba(236, 253, 250, 0.96) !important;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
 }
 
 .landing-accent-label {
@@ -2169,14 +2118,100 @@ textarea::placeholder {
 .landing-gallery {
   flex: 0 0 auto;
   min-height: min(360px, 30dvh);
+  min-width: 0;
 }
 
-.landing-gallery-strip {
+.landing-gallery-header.panel__header,
+.landing-gallery-header {
   display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 12px;
+}
+
+.landing-gallery-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.landing-gallery-file-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.landing-gallery-link-panel {
+  margin-bottom: 12px;
+  max-width: 100%;
+}
+
+.landing-gallery-link-intro {
+  margin: 0 0 8px;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: rgba(15, 23, 42, 0.88) !important;
+}
+
+.landing-gallery-link-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.landing-gallery-link-url {
+  flex: 1 1 220px;
+  min-width: min(100%, 240px);
+}
+
+.landing-gallery-scroll-hint {
+  margin: 10px 0 0;
+  font-size: 0.8rem;
+}
+
+.landing-page-root .landing-gallery-scroll-hint {
+  color: rgba(15, 23, 42, 0.78) !important;
+}
+
+.landing-gallery-scroll {
   overflow-x: auto;
-  padding: 4px 2px 10px;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
   scroll-snap-type: x mandatory;
+  margin: 0 -6px;
+  padding: 6px 6px 14px;
+  min-width: 0;
+}
+
+.landing-gallery-scroll .landing-gallery-strip {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 12px;
+  padding: 4px 2px 8px;
+  overflow: visible;
+  width: max-content;
+  min-width: 100%;
+}
+
+.landing-page-root .landing-gallery-delete-template {
+  color: #7f1d1d !important;
+  background: #fecaca !important;
+  border-color: #f87171 !important;
+}
+
+.landing-page-root .landing-gallery-delete-template:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .landing-gallery-card {
@@ -2217,4 +2252,67 @@ textarea::placeholder {
     grid-template-columns: 1fr;
     min-height: 0;
   }
+}
+
+/* ========= 明信片风格：全站文本类表单控件 ========= */
+#root input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='button']):not([type='submit']):not([type='reset']):not([type='image']):not([type='hidden']):not([type='color']),
+#root select,
+#root textarea,
+.login-shell input:not([type='checkbox']):not([type='radio']),
+.login-card input:not([type='checkbox']):not([type='radio']) {
+  color: var(--postcard-field-text) !important;
+  background: var(--postcard-field-bg) !important;
+  border: 1px solid var(--postcard-field-border) !important;
+  border-radius: 0 !important;
+  box-shadow: var(--postcard-field-shadow) !important;
+  padding: 9px 10px !important;
+  outline: none !important;
+}
+
+#root input[type='file'],
+.login-shell input[type='file'],
+.login-card input[type='file'] {
+  color: var(--postcard-field-text) !important;
+  background: var(--postcard-field-bg) !important;
+  border: 1px solid var(--postcard-field-border) !important;
+  border-radius: 0 !important;
+  box-shadow: var(--postcard-field-shadow) !important;
+  padding: 8px 10px !important;
+  outline: none !important;
+}
+
+#root input::placeholder,
+#root textarea::placeholder,
+.login-shell input::placeholder,
+.login-card input::placeholder {
+  color: var(--postcard-field-placeholder) !important;
+}
+
+#root select option {
+  color: #000000 !important;
+  background: #ffffff !important;
+}
+
+#root input:not([type='checkbox']):not([type='radio']):not([type='hidden']):focus,
+#root select:focus,
+#root textarea:focus,
+.login-shell input:not([type='checkbox']):not([type='radio']):focus,
+.login-card input:not([type='checkbox']):not([type='radio']):focus {
+  border-color: var(--postcard-field-border) !important;
+  box-shadow: var(--postcard-field-shadow), var(--postcard-field-focus-ring) !important;
+}
+
+#root input[type='file']:focus,
+.login-shell input[type='file']:focus,
+.login-card input[type='file']:focus {
+  border-color: var(--postcard-field-border) !important;
+  box-shadow: var(--postcard-field-shadow), var(--postcard-field-focus-ring) !important;
+}
+
+/* 端口卡内紧凑控件 */
+#root .port-card__input,
+#root .port-card__select {
+  padding: 5px 7px !important;
+  min-height: 28px;
+  font-size: 0.72rem;
 }
