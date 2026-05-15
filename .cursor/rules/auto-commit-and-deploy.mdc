@@ -1,23 +1,44 @@
 ---
-description: After code changes in this repo, commit to git and deploy to production VPS
+description: 【强制】whatsapp-new 仓库内改完代码后必须 git 提交、push 并 SSH 部署到生产服务器
 globs: "**/*"
 alwaysApply: true
 ---
 
-# Post-change deploy (whatsapp-new)
+# 强制：改完即提交并上线（whatsapp-new）
 
-When you finish meaningful edits in **this repository** that affect the web app or Runner:
+适用范围：**本仓库**（`whatsapp-new` / QE 渣狗控制台）。  
+优先级：在本仓库内完成任务时，**覆盖**「未明确要求则不要提交」的通用习惯——**只要对业务代码、配置脚本、前端、Runner 做了有效修改，就必须按下面流程收尾**，不得只改本地不推送、不部署。
 
-1. **Do not** stage or commit `deploy/runner.env`, `deploy/auth-users.json`, or `.env` (they are gitignored; never add real secrets).
-2. Run `git status`, `git diff`, review, then `git add` and **`git commit`** with a short message (user expects commits for this project after changes).
-3. **`git push`** to `origin/cursor/qe-system-scaffold-de8c` (or current branch).
-4. **Deploy on the server** (requires SSH to the box with key already configured):
-   - `ssh -p 27637 root@107.149.189.110` then in `/opt/whatsapp-new`:  
-     `git fetch origin && git checkout cursor/qe-system-scaffold-de8c && git reset --hard origin/cursor/qe-system-scaffold-de8c`  
-     `export PATH=/root/.nvm/versions/node/v20.20.2/bin:$PATH`  
-     `npm ci && npm run build && chmod -R a+rX dist && systemctl restart qe-runner`
-   - Or from Git Bash/WSL: `bash scripts/deploy-server.sh` (same steps; `DEPLOY_SSH` / `DEPLOY_BRANCH` override if needed).
+## 必须执行（缺一不可）
 
-If `git push` fails (auth), tell the user immediately. If the server `git fetch` fails, fall back to tarball/scp of changed paths.
+1. **安全**：禁止将 `deploy/runner.env`、`deploy/auth-users.json`、`deploy/auth-users-for-friend.json`、根目录 `.env` 等机密文件加入版本库；提交前确认 `git status` 中无上述内容（应被 `.gitignore` 忽略）。
+2. **检查**：`git status`、`git diff`，只暂存与本次任务相关的文件。
+3. **提交**：`git commit`（信息简短说明目的与影响）。
+4. **推送**：`git push` 到 **`origin` 上当前工作分支**（默认与远端一致为 `cursor/qe-system-scaffold-de8c`，若已换分支则推送当前分支）。
+5. **部署到服务器**：对 **`root@107.149.189.110`** SSH **端口 `27637`**，在 **`/opt/whatsapp-new`** 执行：
+   ```bash
+   export PATH=/root/.nvm/versions/node/v20.20.2/bin:$PATH
+   cd /opt/whatsapp-new
+   git fetch origin
+   git checkout cursor/qe-system-scaffold-de8c
+   git reset --hard origin/cursor/qe-system-scaffold-de8c
+   npm ci
+   npm run build
+   chmod -R a+rX dist
+   systemctl restart qe-runner
+   ```
+   - 本地若有 Git Bash/WSL，也可在项目根目录执行：**`bash scripts/deploy-server.sh`**（脚本内会先 `git push` 再远端拉取构建；可通过 `DEPLOY_SSH`、`DEPLOY_BRANCH`、`DEPLOY_REMOTE_DIR` 覆盖）。
+6. **构建后权限**：必须在服务器上对 **`dist`** 执行 **`chmod -R a+rX dist`**，避免 Nginx（`www-data`）读不到静态文件返回 **403**。
 
-Nginx config on the host is **not** overwritten by git; change `/etc/nginx/sites-available/qe-app` only when routing requires it.
+## 失败时的处理
+
+- **`git push` 失败**（鉴权、网络）：立即告知用户，**不得**谎称已上线。
+- **服务器 `git fetch` 失败**：可改为按文件 **tar/scp** 同步关键路径后再在服务器 `npm ci && npm run build` 并 `chmod`、`restart`，仍须向用户说明采用了备用方式。
+
+## 不在此流程自动覆盖的范围
+
+- 服务器 **`/etc/default/qe-runner`**、**`/etc/nginx/sites-available/qe-app`** 等系统级配置：仅在本次修改**明确涉及**时再改并说明；日常代码发布**不**自动覆盖这些文件。
+
+## 例外（可不部署）
+
+- 仅改 `.cursor/rules`、纯文档、与本项目运行无关且用户明确说「不用上线」的情况——若无法判断，**默认仍走完整流程**。
