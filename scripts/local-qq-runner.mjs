@@ -7,6 +7,7 @@ import os from 'node:os';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { AvsovBatchRunner, checkSingleProxy, isSocks5ProxyFormat, toBatchExportRows } from './avsov-batch-runner.mjs';
 import { AvsovSearchCore, decryptTarget } from './avsov-search-core.mjs';
+import { handleLandingRequest } from './landing-handlers.mjs';
 
 const jsonHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -1542,6 +1543,20 @@ const server = createServer(async (req, res) => {
         distribution,
         phones: visible,
       });
+      return;
+    }
+
+    const landingHandled = await handleLandingRequest({
+      req,
+      res,
+      pathname,
+      method: req.method,
+      readBody,
+      sendJson,
+      requireBatchAuth,
+      projectRoot: resolve(__dirname, '..'),
+    });
+    if (landingHandled) {
       return;
     }
 

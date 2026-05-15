@@ -25,6 +25,7 @@ const devProxy = {
   '/number-library': runnerUpstream,
   '/admin': runnerUpstream,
   '/engine': runnerUpstream,
+  '/landing': runnerUpstream,
 } as Record<string, object>;
 
 export default defineConfig({

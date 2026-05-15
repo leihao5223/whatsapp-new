@@ -1,4 +1,4 @@
-网页版：Nginx 提供前端静态文件，并把 /api 与 /batch 等路径反代到本机 Node Runner（与 vite 开发代理一致）。
+网页版：Nginx 提供前端静态文件，并把 /api、/batch、/pipeline、**/landing** 等路径反代到本机 Node Runner（与 vite 开发代理一致）。
 
 一、服务器要求
 - Debian/Ubuntu，Node.js 20+，Nginx。
@@ -27,7 +27,7 @@
    journalctl -u qe-runner -f
 
 5) Nginx
-   参考 deploy/nginx-qe.conf.sample，root 指向 /opt/whatsapp-new/dist，改 server_name
+   参考 deploy/nginx-qe.conf.sample 或 deploy/qe-app.nginx.conf，root 指向 /opt/whatsapp-new/dist，改 server_name；反代正则中须包含 **landing**（落地页 API）。群发对接见 deploy/LANDING-SEND-API.md。
    nginx -t && systemctl reload nginx
 
 三、朋友使用

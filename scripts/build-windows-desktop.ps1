@@ -20,6 +20,7 @@ if (Test-Path $bundle) {
 New-Item -ItemType Directory -Path (Join-Path $bundle "scripts") | Out-Null
 
 Copy-Item "scripts\local-qq-runner.mjs" (Join-Path $bundle "scripts\") -Force
+Copy-Item "scripts\landing-handlers.mjs" (Join-Path $bundle "scripts\") -Force
 Copy-Item "scripts\avsov-batch-runner.mjs" (Join-Path $bundle "scripts\") -Force
 Copy-Item "scripts\avsov-search-core.mjs" (Join-Path $bundle "scripts\") -Force
 Copy-Item "scripts\engine" (Join-Path $bundle "scripts\engine") -Recurse -Force
