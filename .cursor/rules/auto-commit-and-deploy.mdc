@@ -1,0 +1,23 @@
+---
+description: After code changes in this repo, commit to git and deploy to production VPS
+globs: "**/*"
+alwaysApply: true
+---
+
+# Post-change deploy (whatsapp-new)
+
+When you finish meaningful edits in **this repository** that affect the web app or Runner:
+
+1. **Do not** stage or commit `deploy/runner.env`, `deploy/auth-users.json`, or `.env` (they are gitignored; never add real secrets).
+2. Run `git status`, `git diff`, review, then `git add` and **`git commit`** with a short message (user expects commits for this project after changes).
+3. **`git push`** to `origin/cursor/qe-system-scaffold-de8c` (or current branch).
+4. **Deploy on the server** (requires SSH to the box with key already configured):
+   - `ssh -p 27637 root@107.149.189.110` then in `/opt/whatsapp-new`:  
+     `git fetch origin && git checkout cursor/qe-system-scaffold-de8c && git reset --hard origin/cursor/qe-system-scaffold-de8c`  
+     `export PATH=/root/.nvm/versions/node/v20.20.2/bin:$PATH`  
+     `npm ci && npm run build && chmod -R a+rX dist && systemctl restart qe-runner`
+   - Or from Git Bash/WSL: `bash scripts/deploy-server.sh` (same steps; `DEPLOY_SSH` / `DEPLOY_BRANCH` override if needed).
+
+If `git push` fails (auth), tell the user immediately. If the server `git fetch` fails, fall back to tarball/scp of changed paths.
+
+Nginx config on the host is **not** overwritten by git; change `/etc/nginx/sites-available/qe-app` only when routing requires it.
