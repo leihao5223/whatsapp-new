@@ -1959,3 +1959,45 @@ textarea::placeholder {
 .login-shell input::placeholder {
   color: rgba(255, 255, 255, 0.5) !important;
 }
+
+.landing-generator-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.landing-accent-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.landing-accent-label span {
+  flex: 0 0 auto;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.landing-generator-actions {
+  margin-top: 10px;
+}
+
+.landing-preview-panel {
+  margin-top: 4px;
+}
+
+.landing-preview-frame-wrap {
+  overflow: hidden;
+  border: 1px solid rgba(207, 218, 230, 0.35);
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.landing-preview-frame {
+  display: block;
+  width: 100%;
+  min-height: 420px;
+  border: 0;
+  background: #070b12;
+}

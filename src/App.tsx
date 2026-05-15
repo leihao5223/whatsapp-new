@@ -8,6 +8,7 @@ import {
   FileText,
   Gauge,
   LayoutDashboard,
+  LayoutTemplate,
   Monitor,
   Pause,
   Play,
@@ -22,7 +23,7 @@ import {
 import { type ChangeEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import './styles.css';
 
-type PageKey = 'dashboard' | 'data' | 'accounts' | 'ipPool' | 'runner' | 'security';
+type PageKey = 'dashboard' | 'data' | 'accounts' | 'ipPool' | 'landing' | 'runner' | 'security';
 type QueryStatus = 'pending' | 'running' | 'matched' | 'empty' | 'failed';
 type PortStatus = 'ready' | 'booting' | 'offline';
 type AccountStatus = 'normal' | 'abnormal';
@@ -403,6 +404,7 @@ const navItems: Array<{ key: PageKey; label: string; desc: string; icon: ReactNo
   { key: 'data', label: '号码库', desc: '总库与未发送', icon: <Search size={17} /> },
   { key: 'accounts', label: '端口管理', desc: '端口/IP绑定', icon: <Monitor size={17} /> },
   { key: 'ipPool', label: 'IP池', desc: '导入与绑定', icon: <DatabaseZap size={17} /> },
+  { key: 'landing', label: '落地页生成', desc: '模版与导出', icon: <LayoutTemplate size={17} /> },
   { key: 'runner', label: '任务管理', desc: '并发分发', icon: <Bot size={17} /> },
   { key: 'security', label: '账号安全', desc: '子账号/审计', icon: <ShieldCheck size={17} /> },
 ];
@@ -1736,6 +1738,8 @@ function App() {
             updatePort={updatePort}
           />
         );
+      case 'landing':
+        return <LandingPageGeneratorPage />;
       case 'ipPool':
         return (
           <IpPoolPage
@@ -3396,6 +3400,113 @@ function RunnerPage({
             </table>
           </div>
         ) : null}
+      </section>
+    </div>
+  );
+}
+
+function LandingPageGeneratorPage() {
+  const [headline, setHeadline] = useState('主标题文案');
+  const [subline, setSubline] = useState('一句话说明核心价值，移动端优先阅读。');
+  const [ctaLabel, setCtaLabel] = useState('立即咨询');
+  const [ctaHref, setCtaHref] = useState('#');
+  const [accentHex, setAccentHex] = useState('#22d3ee');
+
+  const buildStandaloneHtml = () => {
+    const esc = (s: string) =>
+      String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    const accent = /^#[0-9a-fA-F]{6}$/.test(accentHex.trim()) ? accentHex.trim() : '#22d3ee';
+    return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>${esc(headline)}</title>
+<style>
+:root{--a:${accent};}
+*{box-sizing:border-box;}
+body{margin:0;min-height:100vh;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+background:radial-gradient(1200px 600px at 10% -10%,color-mix(in srgb,var(--a) 22%,transparent),transparent),#070b12;color:#eaf7ff;}
+.wrap{max-width:520px;margin:0 auto;padding:clamp(24px,8vw,48px) 20px;}
+h1{font-size:clamp(1.75rem,5vw,2.35rem);line-height:1.15;margin:0 0 14px;font-weight:800;letter-spacing:-0.02em;}
+p{margin:0 0 22px;font-size:1.05rem;line-height:1.55;color:rgba(227,246,255,.78);}
+.cta{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 26px;border-radius:14px;
+font-weight:800;text-decoration:none;color:#041016;background:linear-gradient(135deg,color-mix(in srgb,var(--a) 90%,white),var(--a));
+box-shadow:0 18px 40px color-mix(in srgb,var(--a) 35%,transparent);}
+.footer{margin-top:36px;font-size:.82rem;color:rgba(226,239,246,.42);}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>${esc(headline)}</h1>
+<p>${esc(subline)}</p>
+<a class="cta" href="${esc(ctaHref)}">${esc(ctaLabel)}</a>
+<p class="footer">由 QE 控制台「落地页生成」导出 · 可自行替换按钮链接与配色</p>
+</div>
+</body>
+</html>`;
+  };
+
+  const downloadHtml = () => {
+    const blob = new Blob([buildStandaloneHtml()], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `landing-${Date.now()}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="page-stack">
+      <section className="panel settings-panel">
+        <div className="panel__header compact">
+          <div>
+            <p className="section-kicker">Landing</p>
+            <h2>落地页生成</h2>
+          </div>
+        </div>
+        <p className="muted-copy" style={{ marginTop: 0 }}>
+          填写文案与按钮，导出独立单页 HTML（无外链依赖），可用于临时活动页或备用落地。
+        </p>
+        <div className="runtime-config-form landing-generator-form">
+          <input value={headline} onChange={(event) => setHeadline(event.target.value)} placeholder="主标题" />
+          <textarea className="batch-input" rows={3} value={subline} onChange={(event) => setSubline(event.target.value)} placeholder="副标题 / 卖点说明" />
+          <input value={ctaLabel} onChange={(event) => setCtaLabel(event.target.value)} placeholder="按钮文字" />
+          <input value={ctaHref} onChange={(event) => setCtaHref(event.target.value)} placeholder="按钮链接（https:// 或 #）" />
+          <label className="landing-accent-label">
+            <span>主题色</span>
+            <input type="color" value={/^#[0-9a-fA-F]{6}$/.test(accentHex.trim()) ? accentHex.trim() : '#22d3ee'} onChange={(event) => setAccentHex(event.target.value)} />
+            <input
+              aria-label="主题色 Hex"
+              value={accentHex}
+              onChange={(event) => setAccentHex(event.target.value)}
+              placeholder="#22d3ee"
+              style={{ flex: 1 }}
+            />
+          </label>
+        </div>
+        <div className="action-row landing-generator-actions">
+          <button type="button" className="run-button" onClick={() => downloadHtml()}>
+            <Download size={16} />
+            导出 HTML
+          </button>
+        </div>
+      </section>
+      <section className="panel settings-panel landing-preview-panel">
+        <div className="panel__header compact">
+          <div>
+            <p className="section-kicker">Preview</p>
+            <h2>快速预览</h2>
+          </div>
+        </div>
+        <div className="landing-preview-frame-wrap">
+          <iframe className="landing-preview-frame" title="landing-preview" srcDoc={buildStandaloneHtml()} sandbox="allow-same-origin" />
+        </div>
       </section>
     </div>
   );
