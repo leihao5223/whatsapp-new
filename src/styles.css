@@ -3,7 +3,7 @@
 }
 
 :root {
-  --ui-scale: 0.85;
+  --ui-scale: 1;
   color: #d7fff7;
   background: #032c2a;
   font-family:
@@ -13,6 +13,10 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  zoom: 0.85;
 }
 
 body {
