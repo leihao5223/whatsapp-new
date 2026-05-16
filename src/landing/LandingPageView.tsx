@@ -347,30 +347,55 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
     <div className="landing-page-root">
       {notice ? <div className="connector-note landing-notice">{notice}</div> : null}
 
+
+      <header className="landing-page-hero">
+        <div className="landing-page-hero__copy">
+          <p className="section-kicker">Landing Studio</p>
+          <h1 className="landing-page-hero__title">落地页工坊</h1>
+          <p className="landing-page-hero__desc">编辑文案与素材 · 实时预览版式 · 管理模板图册与发送配额</p>
+        </div>
+        <div className="landing-page-hero__stats">
+          <div className="landing-stat-pill">
+            <span>当前版式</span>
+            <strong>{selectedCustom ? selectedCustom.name : frame?.styleId ?? '-'}</strong>
+          </div>
+          <div className="landing-stat-pill">
+            <span>内置模板</span>
+            <strong>{LANDING_GALLERY.length}</strong>
+          </div>
+          <div className="landing-stat-pill">
+            <span>自定义</span>
+            <strong>{customList.length}</strong>
+          </div>
+        </div>
+      </header>
+
       <div className="landing-top-split">
-        <section className="panel settings-panel landing-col landing-col--form">
-          <div className="panel__header compact">
+        <section className="landing-panel landing-col landing-col--form">
+          <div className="landing-panel__head">
+            <span className="landing-panel__badge">01</span>
             <div>
               <p className="section-kicker">Content</p>
               <h2>文案与素材</h2>
             </div>
           </div>
-          <div className="landing-generator-form">
+          <div className="landing-col__body landing-generator-form">
             <div className="landing-glass-field">
               <label className="landing-field-label">项目名</label>
-              <input value={doc.profile.projectName} onChange={(e) => setDoc({ ...doc, profile: { ...doc.profile, projectName: e.target.value } })} />
+              <input className="landing-glass-control" value={doc.profile.projectName} onChange={(e) => setDoc({ ...doc, profile: { ...doc.profile, projectName: e.target.value } })} />
             </div>
             <div className="landing-glass-field">
               <label className="landing-field-label">公司类型</label>
-              <input value={doc.profile.companyType} onChange={(e) => setDoc({ ...doc, profile: { ...doc.profile, companyType: e.target.value } })} />
+              <input className="landing-glass-control" value={doc.profile.companyType} onChange={(e) => setDoc({ ...doc, profile: { ...doc.profile, companyType: e.target.value } })} />
             </div>
             <div className="landing-glass-field">
               <label className="landing-field-label">Logo（PNG）</label>
-              <input type="file" accept="image/png,.png,application/x-png" onChange={(e) => void onLogoFile(e)} />
+              <input className="landing-glass-control landing-glass-control--file" type="file" accept="image/png,.png,application/x-png" onChange={(e) => void onLogoFile(e)} />
             </div>
             <div className="landing-glass-field">
               <label className="landing-field-label">按钮类型</label>
               <select
+                className="landing-glass-control"
                 value={doc.profile.buttonType}
                 onChange={(e) =>
                   setDoc({
@@ -385,6 +410,7 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
               </select>
               {doc.profile.buttonType === 'app' ? (
                 <input
+                  className="landing-glass-control"
                   placeholder="应用包 / 商店链接"
                   value={doc.profile.appDownloadUrl}
                   onChange={(e) => setDoc({ ...doc, profile: { ...doc.profile, appDownloadUrl: e.target.value } })}
@@ -392,6 +418,7 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
               ) : null}
               {doc.profile.buttonType === 'service' ? (
                 <input
+                  className="landing-glass-control"
                   placeholder="客服链接（WhatsApp / 企微等）"
                   value={doc.profile.serviceUrl}
                   onChange={(e) => setDoc({ ...doc, profile: { ...doc.profile, serviceUrl: e.target.value } })}
@@ -399,6 +426,7 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
               ) : null}
               {doc.profile.buttonType === 'site' ? (
                 <input
+                  className="landing-glass-control"
                   placeholder="官网 URL"
                   value={doc.profile.siteUrl}
                   onChange={(e) => setDoc({ ...doc, profile: { ...doc.profile, siteUrl: e.target.value } })}
@@ -406,21 +434,23 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
               ) : null}
             </div>
           </div>
-          <div className="action-row">
+          <div className="landing-panel__foot action-row">
             <button type="button" className="run-button" disabled={busy} onClick={() => void saveProfile({ ...doc.profile })}>
               保存资料
             </button>
           </div>
         </section>
 
-        <section className="panel settings-panel landing-col landing-col--preview">
-          <div className="panel__header compact">
+        <section className="landing-panel landing-col landing-col--preview">
+          <div className="landing-panel__head">
+            <span className="landing-panel__badge landing-panel__badge--accent">02</span>
             <div>
               <p className="section-kicker">Preview</p>
               <h2>实时预览</h2>
             </div>
           </div>
-          <p className="muted-copy landing-preview-meta">
+          <div className="landing-col__body landing-preview-panel">
+          <p className="landing-preview-meta">
             {selectedCustom ? (
               <>
                 当前模板：<strong>{selectedCustom.name}</strong>（{selectedCustom.source === 'url' ? '外链复刻' : 'ZIP 包'}）
@@ -457,7 +487,8 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
               />
             )}
           </div>
-          <div className="landing-preview-toolbar">
+          </div>
+          <div className="landing-preview-toolbar landing-panel__foot">
             <button type="button" className="soft-button" disabled={busy || !!selectedCustom} onClick={() => void onLayoutPrev()}>
               <ChevronLeft size={16} /> 返回上一版式
             </button>
@@ -475,14 +506,17 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
           </div>
         </section>
 
-        <section className="panel settings-panel landing-col landing-col--settings">
-          <div className="panel__header compact">
+        <section className="landing-panel landing-col landing-col--settings">
+          <div className="landing-panel__head">
+            <span className="landing-panel__badge">03</span>
             <div>
               <p className="section-kicker">Settings</p>
               <h2>落地页设置</h2>
             </div>
           </div>
-          <div className="landing-settings-stack">
+          <div className="landing-col__body landing-settings-stack">
+            <section className="landing-settings-group">
+              <h3 className="landing-settings-group__title">展示与轮换</h3>
             <label className="landing-check">
               <input type="checkbox" checked={doc.settings.pdfPresentation} onChange={(e) => setDoc({ ...doc, settings: { ...doc.settings, pdfPresentation: e.target.checked } })} />
               <span>以 PDF 展示（开启后出现「打印 / 存 PDF」）</span>
@@ -491,8 +525,12 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
               <input type="checkbox" checked={doc.settings.randomStyle} onChange={(e) => setDoc({ ...doc, settings: { ...doc.settings, randomStyle: e.target.checked } })} />
               <span>随机样式（关闭则按顺序轮换）</span>
             </label>
+            </section>
+            <section className="landing-settings-group">
+              <h3 className="landing-settings-group__title">样式锁定</h3>
             <label className="landing-field-label">指定当前样式（锁定版式 ID，留空则不锁）</label>
             <select
+              className="landing-glass-control"
               value={doc.settings.lockTemplateId}
               onChange={(e) => setDoc({ ...doc, settings: { ...doc.settings, lockTemplateId: e.target.value } })}
             >
@@ -511,12 +549,15 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
               />
               <span>使用外网占位图（Picsum，需联网）</span>
             </label>
-            <label className="landing-field-label">每种样式发送次数上限</label>
+            </section>
+            <section className="landing-settings-group">
+              <h3 className="landing-settings-group__title">发送次数上限</h3>
             <div className="landing-limits-grid">
               {LANDING_STYLE_IDS.map((id) => (
                 <div key={id} className="landing-limit-row">
                   <span>{id}</span>
                   <input
+                    className="landing-glass-control"
                     type="number"
                     min={0}
                     value={doc.settings.styleSendLimits[id] ?? 0}
@@ -534,15 +575,19 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
                 </div>
               ))}
             </div>
-            <label className="landing-field-label">域名 / 泛域名仓库（每行一个，如 a.com 或 *.b.com）</label>
+            </section>
+            <section className="landing-settings-group">
+              <h3 className="landing-settings-group__title">域名仓库</h3>
+            <label className="landing-field-label">域名 / 泛域名（每行一个，如 a.com 或 *.b.com）</label>
             <textarea
-              className="batch-input"
+              className="landing-glass-control batch-input"
               rows={5}
               value={doc.settings.domainsText}
               onChange={(e) => setDoc({ ...doc, settings: { ...doc.settings, domainsText: e.target.value } })}
             />
+            </section>
           </div>
-          <div className="action-row landing-settings-actions">
+          <div className="action-row landing-settings-actions landing-panel__foot">
             <button type="button" className="run-button" disabled={busy} onClick={() => void saveSettings({ ...doc.settings })}>
               保存设置
             </button>
@@ -578,8 +623,9 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
         </section>
       </div>
 
-      <section className="panel settings-panel landing-gallery">
-        <div className="panel__header compact landing-gallery-header">
+      <section className="landing-panel landing-gallery">
+        <div className="landing-panel__head landing-gallery-header">
+          <span className="landing-panel__badge">04</span>
           <div>
             <p className="section-kicker">Gallery</p>
             <h2>模板图册</h2>
@@ -635,8 +681,8 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
         <div className="landing-gallery-link-panel">
           <p className="landing-gallery-link-intro">添加方式二选一：上传 ZIP 包，或填写链接后按该网页样式在预览中复刻（iframe）。</p>
           <div className="landing-gallery-link-row">
-            <input placeholder="模板名称" value={urlTplName} onChange={(e) => setUrlTplName(e.target.value)} />
-            <input className="landing-gallery-link-url" placeholder="https://example.com/..." value={urlTplUrl} onChange={(e) => setUrlTplUrl(e.target.value)} />
+            <input className="landing-glass-control" placeholder="模板名称" value={urlTplName} onChange={(e) => setUrlTplName(e.target.value)} />
+            <input className="landing-glass-control landing-gallery-link-url" placeholder="https://example.com/..." value={urlTplUrl} onChange={(e) => setUrlTplUrl(e.target.value)} />
             <button
               type="button"
               className="run-button"
