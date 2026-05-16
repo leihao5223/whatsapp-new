@@ -378,14 +378,15 @@ button:disabled {
   padding: 22px 24px 28px;
 }
 
-/* 落地页：占满内容区高度，上图下册 70/30，避免图册叠在中间 */
+/* 落地页：一屏四区，页面不滚动，区内滚动 */
+.content-shell:has(.lp-page),
 .content-shell:has(.landing-page-root) {
   display: flex;
   flex-direction: column;
   min-height: 0;
   height: calc(var(--layout-min-height, 100dvh) - 44px);
   max-height: calc(var(--layout-min-height, 100dvh) - 44px);
-  padding: 14px 18px 16px;
+  padding: 12px 16px 14px;
   overflow: hidden;
 }
 
@@ -2171,38 +2172,49 @@ textarea::placeholder {
 }
 
 /* 落地页：深色玻璃主题，高对比浅色文字 */
+.lp-page .landing-field-label,
+.lp-page .landing-check span,
+.lp-page .landing-preview-meta,
+.lp-page .landing-limit-row span,
+.lp-page .lp-zone__kicker,
+.lp-page .lp-zone__head h2,
+.lp-page .lp-dock__head h2,
+.lp-page .landing-gallery-link-intro,
+.lp-page .landing-gallery-scroll-hint,
+.lp-page .lp-toolbar__kicker,
+.lp-page .lp-toolbar__stat,
 .landing-page-root .landing-field-label,
 .landing-page-root .landing-check span,
 .landing-page-root .landing-preview-meta,
 .landing-page-root .landing-limit-row span,
-.landing-page-root .landing-panel__head .section-kicker,
-.landing-page-root .landing-panel__head h2,
-.landing-page-root .landing-page-hero__title,
-.landing-page-root .landing-page-hero__desc,
 .landing-page-root .landing-gallery-link-intro,
-.landing-page-root .landing-gallery-scroll-hint,
-.landing-page-root .landing-stat-pill span {
+.landing-page-root .landing-gallery-scroll-hint {
   color: rgba(236, 253, 250, 0.92) !important;
 }
 
+.lp-page .landing-preview-meta strong,
+.lp-page .lp-toolbar__stat strong,
+.lp-page .landing-gallery-card strong,
 .landing-page-root .landing-preview-meta strong,
-.landing-page-root .landing-stat-pill strong,
 .landing-page-root .landing-gallery-card strong {
   color: #eafffb !important;
 }
 
+.lp-page .landing-limit-row small,
+.lp-page .landing-gallery-card small,
 .landing-page-root .landing-limit-row small,
-.landing-page-root .landing-gallery-card small,
-.landing-page-root .landing-stat-pill span {
+.landing-page-root .landing-gallery-card small {
   color: rgba(163, 255, 234, 0.72) !important;
 }
 
+.lp-page .soft-button,
 .landing-page-root .soft-button {
   color: #d7fff7 !important;
   background: rgba(2, 37, 39, 0.72) !important;
   border-color: rgba(163, 255, 234, 0.28) !important;
 }
 
+.lp-page .run-button,
 .landing-page-root .run-button {
   color: #042729 !important;
 }
@@ -2213,6 +2225,7 @@ textarea::placeholder {
   margin-top: 8px;
 }
 
+.lp-page .landing-glass-field,
 .landing-page-root .landing-glass-field {
   display: flex;
   flex-direction: column;
@@ -2230,6 +2243,7 @@ textarea::placeholder {
   isolation: isolate;
 }
 
+.lp-page .landing-glass-field > .landing-field-label,
 .landing-page-root .landing-glass-field > .landing-field-label {
   margin: 0 !important;
   color: rgba(236, 253, 250, 0.96) !important;
@@ -2286,32 +2300,9 @@ textarea::placeholder {
   background: rgba(163, 255, 234, 0.35);
 }
 
-.landing-preview-frame {
-  display: block;
-  width: 100%;
-  height: min(58vh, 720px);
-  min-height: 360px;
-  max-height: 780px;
-  border: 0;
-  border-radius: 14px;
-  background: #070b12;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-}
+/* preview iframe sizing: .lp-preview-frame */
 
-.landing-page-root {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) minmax(200px, 30vh);
-  flex: 1 1 auto;
-  min-height: 0;
-  height: 100%;
-  gap: 12px;
-  overflow: hidden;
-}
-
-.landing-workspace {
-  min-height: 0;
-  overflow: hidden;
-}
+/* legacy landing-page-root layout superseded by .lp-page — keep class for glass/input scoping */
 
 .landing-page-hero {
   flex-shrink: 0;
@@ -2436,15 +2427,7 @@ textarea::placeholder {
   margin: 0;
 }
 
-.landing-top-split {
-  display: grid;
-  grid-template-columns: minmax(260px, 1fr) minmax(320px, 1.35fr) minmax(280px, 1.05fr);
-  gap: 14px;
-  height: 100%;
-  min-height: 0;
-  max-height: none;
-  align-items: stretch;
-}
+/* .landing-top-split removed — use .lp-main */
 
 .landing-col {
   min-height: 0;
@@ -2551,30 +2534,7 @@ textarea::placeholder {
   margin-top: 10px;
 }
 
-.landing-gallery {
-  min-height: 0;
-  max-height: 30vh;
-  min-width: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  border-radius: 20px;
-  border: 1px solid rgba(163, 255, 234, 0.2);
-  background:
-    radial-gradient(circle at 0% 100%, rgba(34, 211, 238, 0.1), transparent 40%),
-    linear-gradient(160deg, rgba(6, 56, 59, 0.9), rgba(4, 38, 40, 0.78));
-  backdrop-filter: blur(14px);
-  box-shadow: 0 14px 36px rgba(2, 18, 22, 0.32);
-  padding: 4px 0 0;
-  position: relative;
-  z-index: 0;
-  flex-shrink: 0;
-}
-
-.landing-gallery--dock {
-  grid-row: 3;
-  align-self: end;
-}
+/* gallery dock: .lp-dock */
 
 .landing-gallery-header.panel__header,
 .landing-gallery-header {
@@ -2757,52 +2717,24 @@ textarea::placeholder {
   font-weight: 700;
 }
 
-@media (max-width: 1280px) {
-  .content-shell:has(.landing-page-root) {
-    height: auto;
-    max-height: none;
-    overflow: auto;
-  }
-
-  .landing-page-root {
-    display: flex;
-    flex-direction: column;
-    height: auto;
-    overflow: visible;
-  }
-
-  .landing-workspace {
-    overflow: visible;
-  }
-
-  .landing-top-split {
-    grid-template-columns: 1fr;
-    height: auto;
-    min-height: 0;
-  }
-
-  .landing-gallery,
-  .landing-gallery--dock {
-    max-height: none;
-    min-height: 320px;
-  }
-
-  .landing-page-hero {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-}
+/* landing responsive: see .lp-page @media block above */
 
 /* 落地页控件：覆盖全局「明信片」白底，统一玻璃输入 */
+.lp-page .landing-glass-control,
+.lp-page .landing-glass-field input:not([type='checkbox']):not([type='radio']),
+.lp-page .landing-glass-field select,
+.lp-page .landing-glass-field textarea,
+.lp-page .landing-settings-stack input:not([type='checkbox']):not([type='radio']),
+.lp-page .landing-settings-stack select,
+.lp-page .landing-settings-stack textarea,
+.lp-page .lp-dock__body input:not([type='file']),
 .landing-page-root .landing-glass-control,
 .landing-page-root .landing-glass-field input:not([type='checkbox']):not([type='radio']),
 .landing-page-root .landing-glass-field select,
 .landing-page-root .landing-glass-field textarea,
 .landing-page-root .landing-settings-stack input:not([type='checkbox']):not([type='radio']),
 .landing-page-root .landing-settings-stack select,
-.landing-page-root .landing-settings-stack textarea,
-.landing-page-root .landing-gallery-link-panel input:not([type='file']),
-.landing-page-root .landing-gallery-link-panel select {
+.landing-page-root .landing-settings-stack textarea {
   width: 100%;
   border-radius: 12px !important;
   border: 1px solid rgba(163, 255, 234, 0.32) !important;
@@ -2812,41 +2744,356 @@ textarea::placeholder {
   padding: 10px 12px !important;
 }
 
+.lp-page .landing-glass-control--file,
 .landing-page-root .landing-glass-control--file {
   padding: 8px 10px !important;
   font-size: 0.82rem !important;
 }
 
+.lp-page .landing-limit-row input,
 .landing-page-root .landing-limit-row input {
   padding: 6px 8px !important;
   min-height: 32px;
   text-align: center;
 }
 
+.lp-page .landing-glass-control::placeholder,
+.lp-page .landing-settings-stack textarea::placeholder,
+.lp-page .lp-dock__body input::placeholder,
 .landing-page-root .landing-glass-control::placeholder,
-.landing-page-root .landing-settings-stack textarea::placeholder,
-.landing-page-root .landing-gallery-link-panel input::placeholder {
+.landing-page-root .landing-settings-stack textarea::placeholder {
   color: rgba(200, 245, 236, 0.5) !important;
 }
 
+.lp-page select option,
 .landing-page-root select option {
   color: #042729 !important;
   background: #eafffb !important;
 }
 
+.lp-page .landing-glass-control:focus,
+.lp-page .landing-settings-stack input:focus,
+.lp-page .landing-settings-stack select:focus,
+.lp-page .landing-settings-stack textarea:focus,
+.lp-page .lp-dock__body input:focus,
 .landing-page-root .landing-glass-control:focus,
 .landing-page-root .landing-settings-stack input:focus,
 .landing-page-root .landing-settings-stack select:focus,
-.landing-page-root .landing-settings-stack textarea:focus,
-.landing-page-root .landing-gallery-link-panel input:focus {
+.landing-page-root .landing-settings-stack textarea:focus {
   outline: none !important;
   border-color: rgba(125, 255, 231, 0.62) !important;
   box-shadow: 0 0 0 3px rgba(93, 255, 176, 0.16) !important;
 }
 
+.lp-page .batch-input,
 .landing-page-root .batch-input {
   min-height: 110px;
   border-radius: 12px !important;
+}
+
+/* ========= 落地页固定分区布局（lp-*） ========= */
+.lp-page {
+  position: relative;
+  display: grid;
+  grid-template-rows: 52px minmax(0, 1fr) minmax(200px, 28%);
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.lp-notice {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  z-index: 20;
+  transform: translateX(-50%);
+  max-width: min(560px, 92%);
+  margin: 0;
+  box-shadow: 0 8px 24px rgba(2, 18, 22, 0.45);
+}
+
+.lp-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 14px;
+  min-height: 52px;
+  border-radius: 14px;
+  border: 1px solid rgba(163, 255, 234, 0.22);
+  background: linear-gradient(135deg, rgba(8, 58, 60, 0.88), rgba(4, 38, 40, 0.72));
+  backdrop-filter: blur(14px);
+  box-shadow: 0 8px 24px rgba(2, 18, 22, 0.28);
+}
+
+.lp-toolbar__title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.lp-toolbar__kicker {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(163, 255, 234, 0.82) !important;
+}
+
+.lp-toolbar__title strong {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #eafffb !important;
+}
+
+.lp-toolbar__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.lp-toolbar__stat {
+  font-size: 0.78rem;
+  color: rgba(200, 245, 236, 0.78) !important;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(163, 255, 234, 0.2);
+  background: rgba(2, 32, 34, 0.5);
+  white-space: nowrap;
+}
+
+.lp-toolbar__stat strong {
+  color: #eafffb !important;
+  font-weight: 700;
+}
+
+.lp-main {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(280px, 1.2fr) minmax(240px, 1fr);
+  gap: 10px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.lp-zone {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid rgba(163, 255, 234, 0.2);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(93, 255, 176, 0.08), transparent 38%),
+    linear-gradient(160deg, rgba(6, 56, 59, 0.9), rgba(4, 38, 40, 0.78));
+  backdrop-filter: blur(14px) saturate(140%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 10px 28px rgba(2, 18, 22, 0.28);
+}
+
+.lp-zone__head,
+.lp-dock__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid rgba(163, 255, 234, 0.14);
+}
+
+.lp-zone__head h2,
+.lp-dock__head h2 {
+  margin: 0;
+  font-size: 1rem;
+  color: #eafffb !important;
+}
+
+.lp-zone__kicker {
+  margin: 0 0 2px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(163, 255, 234, 0.82) !important;
+}
+
+.lp-zone__badge {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #042729 !important;
+  background: linear-gradient(135deg, rgba(93, 255, 176, 0.95), rgba(127, 255, 231, 0.9));
+}
+
+.lp-zone__badge--accent {
+  color: #eafffb !important;
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.55), rgba(93, 255, 176, 0.45));
+  border: 1px solid rgba(163, 255, 234, 0.35);
+}
+
+.lp-zone__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px 14px;
+}
+
+.lp-zone__foot {
+  flex-shrink: 0;
+  padding: 10px 14px 12px;
+  border-top: 1px solid rgba(163, 255, 234, 0.12);
+  margin-top: auto;
+}
+
+.lp-preview-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.lp-preview-frame-wrap {
+  flex: 1 1 auto;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid rgba(163, 255, 234, 0.22);
+  background: rgba(2, 18, 22, 0.65);
+  padding: 10px;
+}
+
+.lp-preview-frame-wrap::before {
+  content: '';
+  display: block;
+  width: 72px;
+  height: 5px;
+  margin: 0 auto 8px;
+  border-radius: 999px;
+  background: rgba(163, 255, 234, 0.35);
+  flex-shrink: 0;
+}
+
+.lp-preview-frame {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  height: 100%;
+  border: 0;
+  border-radius: 10px;
+  background: #070b12;
+}
+
+.lp-preview-toolbar {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lp-dock {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) 120px;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid rgba(163, 255, 234, 0.2);
+  background:
+    radial-gradient(circle at 0% 100%, rgba(34, 211, 238, 0.1), transparent 40%),
+    linear-gradient(160deg, rgba(6, 56, 59, 0.92), rgba(4, 38, 40, 0.8));
+  backdrop-filter: blur(14px);
+  box-shadow: 0 10px 28px rgba(2, 18, 22, 0.28);
+}
+
+.lp-dock__head {
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.lp-dock__head > div:nth-child(2) {
+  flex: 1 1 auto;
+  min-width: 120px;
+}
+
+.lp-dock__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.lp-dock__body {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(163, 255, 234, 0.1);
+}
+
+.lp-dock__strip {
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 8px 12px 10px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.lp-dock__strip .landing-gallery-strip {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 10px;
+  width: max-content;
+  min-width: 100%;
+  padding: 2px 0;
+}
+
+.lp-page .landing-preview-meta {
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.lp-page .landing-generator-form,
+.lp-page .landing-settings-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.lp-page .landing-settings-actions {
+  margin-top: 0;
+}
+
+@media (max-width: 1280px) {
+  .content-shell:has(.lp-page) {
+    height: calc(var(--layout-min-height, 100dvh) - 44px);
+    max-height: calc(var(--layout-min-height, 100dvh) - 44px);
+    overflow: hidden;
+  }
+
+  .lp-page {
+    grid-template-rows: 52px minmax(0, 1.65fr) minmax(160px, 24%);
+  }
+
+  .lp-main {
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(3, minmax(0, 1fr));
+    overflow: hidden;
+  }
+
+  .lp-dock {
+    grid-template-rows: auto minmax(0, 1fr) 100px;
+  }
 }
 
 /* ========= 明信片风格：全站文本类表单控件 ========= */

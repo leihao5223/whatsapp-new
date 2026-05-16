@@ -344,43 +344,37 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
   const frame = doc.runtime.historyStack[doc.runtime.historyIndex] ?? doc.runtime.historyStack[0];
 
   return (
-    <div className="landing-page-root">
-      {notice ? <div className="connector-note landing-notice">{notice}</div> : null}
+    <div className="lp-page landing-page-root">
+      {notice ? <div className="connector-note lp-notice">{notice}</div> : null}
 
-
-      <header className="landing-page-hero">
-        <div className="landing-page-hero__copy">
-          <p className="section-kicker">Landing Studio</p>
-          <h1 className="landing-page-hero__title">落地页工坊</h1>
-          <p className="landing-page-hero__desc">编辑文案与素材 · 实时预览版式 · 管理模板图册与发送配额</p>
+      <header className="lp-toolbar">
+        <div className="lp-toolbar__title">
+          <span className="lp-toolbar__kicker">Landing Studio</span>
+          <strong>落地页工坊</strong>
         </div>
-        <div className="landing-page-hero__stats">
-          <div className="landing-stat-pill">
-            <span>当前版式</span>
-            <strong>{selectedCustom ? selectedCustom.name : frame?.styleId ?? '-'}</strong>
-          </div>
-          <div className="landing-stat-pill">
-            <span>内置模板</span>
-            <strong>{LANDING_GALLERY.length}</strong>
-          </div>
-          <div className="landing-stat-pill">
-            <span>自定义</span>
-            <strong>{customList.length}</strong>
-          </div>
+        <div className="lp-toolbar__stats">
+          <span className="lp-toolbar__stat">
+            版式 <strong>{selectedCustom ? selectedCustom.name : frame?.styleId ?? '-'}</strong>
+          </span>
+          <span className="lp-toolbar__stat">
+            内置 <strong>{LANDING_GALLERY.length}</strong>
+          </span>
+          <span className="lp-toolbar__stat">
+            自定义 <strong>{customList.length}</strong>
+          </span>
         </div>
       </header>
 
-      <div className="landing-workspace">
-        <div className="landing-top-split">
-        <section className="landing-panel landing-col landing-col--form">
-          <div className="landing-panel__head">
-            <span className="landing-panel__badge">01</span>
+      <div className="lp-main">
+        <section className="lp-zone lp-zone--content">
+          <header className="lp-zone__head">
+            <span className="lp-zone__badge">01</span>
             <div>
-              <p className="section-kicker">Content</p>
+              <p className="lp-zone__kicker">Content</p>
               <h2>文案与素材</h2>
             </div>
-          </div>
-          <div className="landing-col__body landing-generator-form">
+          </header>
+          <div className="lp-zone__body landing-generator-form">
             <div className="landing-glass-field">
               <label className="landing-field-label">项目名</label>
               <input className="landing-glass-control" value={doc.profile.projectName} onChange={(e) => setDoc({ ...doc, profile: { ...doc.profile, projectName: e.target.value } })} />
@@ -435,61 +429,61 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
               ) : null}
             </div>
           </div>
-          <div className="landing-panel__foot action-row">
+          <footer className="lp-zone__foot action-row">
             <button type="button" className="run-button" disabled={busy} onClick={() => void saveProfile({ ...doc.profile })}>
               保存资料
             </button>
-          </div>
+          </footer>
         </section>
 
-        <section className="landing-panel landing-col landing-col--preview">
-          <div className="landing-panel__head">
-            <span className="landing-panel__badge landing-panel__badge--accent">02</span>
+        <section className="lp-zone lp-zone--preview">
+          <header className="lp-zone__head">
+            <span className="lp-zone__badge lp-zone__badge--accent">02</span>
             <div>
-              <p className="section-kicker">Preview</p>
+              <p className="lp-zone__kicker">Preview</p>
               <h2>实时预览</h2>
             </div>
+          </header>
+          <div className="lp-zone__body lp-preview-body">
+            <p className="landing-preview-meta">
+              {selectedCustom ? (
+                <>
+                  当前模板：<strong>{selectedCustom.name}</strong>（{selectedCustom.source === 'url' ? '外链复刻' : 'ZIP 包'}）
+                </>
+              ) : (
+                <>
+                  当前版式：<strong>{frame.styleId}</strong> · seed {frame.seed}
+                </>
+              )}
+            </p>
+            <div className="lp-preview-frame-wrap">
+              {previewRemoteSrc ? (
+                <iframe
+                  key={`ext-${selectedCustom?.id ?? 'x'}`}
+                  ref={iframeRef}
+                  className="lp-preview-frame"
+                  title="landing-preview"
+                  src={previewRemoteSrc}
+                  sandbox={
+                    selectedCustom?.source === 'url'
+                      ? 'allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals'
+                      : 'allow-scripts allow-same-origin allow-forms allow-popups allow-modals'
+                  }
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <iframe
+                  key="sys"
+                  ref={iframeRef}
+                  className="lp-preview-frame"
+                  title="landing-preview"
+                  srcDoc={previewSrcDoc}
+                  sandbox="allow-same-origin allow-modals"
+                />
+              )}
+            </div>
           </div>
-          <div className="landing-col__body landing-preview-panel">
-          <p className="landing-preview-meta">
-            {selectedCustom ? (
-              <>
-                当前模板：<strong>{selectedCustom.name}</strong>（{selectedCustom.source === 'url' ? '外链复刻' : 'ZIP 包'}）
-              </>
-            ) : (
-              <>
-                当前版式：<strong>{frame.styleId}</strong> · seed {frame.seed}
-              </>
-            )}
-          </p>
-          <div className="landing-preview-frame-wrap landing-preview-frame-wrap--tall">
-            {previewRemoteSrc ? (
-              <iframe
-                key={`ext-${selectedCustom?.id ?? 'x'}`}
-                ref={iframeRef}
-                className="landing-preview-frame"
-                title="landing-preview"
-                src={previewRemoteSrc}
-                sandbox={
-                  selectedCustom?.source === 'url'
-                    ? 'allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals'
-                    : 'allow-scripts allow-same-origin allow-forms allow-popups allow-modals'
-                }
-                referrerPolicy="no-referrer"
-              />
-            ) : (
-              <iframe
-                key="sys"
-                ref={iframeRef}
-                className="landing-preview-frame"
-                title="landing-preview"
-                srcDoc={previewSrcDoc}
-                sandbox="allow-same-origin allow-modals"
-              />
-            )}
-          </div>
-          </div>
-          <div className="landing-preview-toolbar landing-panel__foot">
+          <footer className="lp-zone__foot lp-preview-toolbar action-row">
             <button type="button" className="soft-button" disabled={busy || !!selectedCustom} onClick={() => void onLayoutPrev()}>
               <ChevronLeft size={16} /> 返回上一版式
             </button>
@@ -504,91 +498,91 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
             <button type="button" className="soft-button" onClick={() => void onExportHtml()}>
               <Download size={16} /> 导出 HTML
             </button>
-          </div>
+          </footer>
         </section>
 
-        <section className="landing-panel landing-col landing-col--settings">
-          <div className="landing-panel__head">
-            <span className="landing-panel__badge">03</span>
+        <section className="lp-zone lp-zone--settings">
+          <header className="lp-zone__head">
+            <span className="lp-zone__badge">03</span>
             <div>
-              <p className="section-kicker">Settings</p>
+              <p className="lp-zone__kicker">Settings</p>
               <h2>落地页设置</h2>
             </div>
-          </div>
-          <div className="landing-col__body landing-settings-stack">
+          </header>
+          <div className="lp-zone__body landing-settings-stack">
             <section className="landing-settings-group">
               <h3 className="landing-settings-group__title">展示与轮换</h3>
-            <label className="landing-check">
-              <input type="checkbox" checked={doc.settings.pdfPresentation} onChange={(e) => setDoc({ ...doc, settings: { ...doc.settings, pdfPresentation: e.target.checked } })} />
-              <span>以 PDF 展示（开启后出现「打印 / 存 PDF」）</span>
-            </label>
-            <label className="landing-check">
-              <input type="checkbox" checked={doc.settings.randomStyle} onChange={(e) => setDoc({ ...doc, settings: { ...doc.settings, randomStyle: e.target.checked } })} />
-              <span>随机样式（关闭则按顺序轮换）</span>
-            </label>
+              <label className="landing-check">
+                <input type="checkbox" checked={doc.settings.pdfPresentation} onChange={(e) => setDoc({ ...doc, settings: { ...doc.settings, pdfPresentation: e.target.checked } })} />
+                <span>以 PDF 展示（开启后出现「打印 / 存 PDF」）</span>
+              </label>
+              <label className="landing-check">
+                <input type="checkbox" checked={doc.settings.randomStyle} onChange={(e) => setDoc({ ...doc, settings: { ...doc.settings, randomStyle: e.target.checked } })} />
+                <span>随机样式（关闭则按顺序轮换）</span>
+              </label>
             </section>
             <section className="landing-settings-group">
               <h3 className="landing-settings-group__title">样式锁定</h3>
-            <label className="landing-field-label">指定当前样式（锁定版式 ID，留空则不锁）</label>
-            <select
-              className="landing-glass-control"
-              value={doc.settings.lockTemplateId}
-              onChange={(e) => setDoc({ ...doc, settings: { ...doc.settings, lockTemplateId: e.target.value } })}
-            >
-              <option value="">不锁定</option>
-              {LANDING_STYLE_IDS.map((id) => (
-                <option key={id} value={id}>
-                  {id === 'premium-scroll' ? '典藏长页（高规格）' : id}
-                </option>
-              ))}
-            </select>
-            <label className="landing-check">
-              <input
-                type="checkbox"
-                checked={doc.settings.usePlaceholderImages}
-                onChange={(e) => setDoc({ ...doc, settings: { ...doc.settings, usePlaceholderImages: e.target.checked } })}
-              />
-              <span>使用外网占位图（Picsum，需联网）</span>
-            </label>
+              <label className="landing-field-label">指定当前样式（锁定版式 ID，留空则不锁）</label>
+              <select
+                className="landing-glass-control"
+                value={doc.settings.lockTemplateId}
+                onChange={(e) => setDoc({ ...doc, settings: { ...doc.settings, lockTemplateId: e.target.value } })}
+              >
+                <option value="">不锁定</option>
+                {LANDING_STYLE_IDS.map((id) => (
+                  <option key={id} value={id}>
+                    {id === 'premium-scroll' ? '典藏长页（高规格）' : id}
+                  </option>
+                ))}
+              </select>
+              <label className="landing-check">
+                <input
+                  type="checkbox"
+                  checked={doc.settings.usePlaceholderImages}
+                  onChange={(e) => setDoc({ ...doc, settings: { ...doc.settings, usePlaceholderImages: e.target.checked } })}
+                />
+                <span>使用外网占位图（Picsum，需联网）</span>
+              </label>
             </section>
             <section className="landing-settings-group">
               <h3 className="landing-settings-group__title">发送次数上限</h3>
-            <div className="landing-limits-grid">
-              {LANDING_STYLE_IDS.map((id) => (
-                <div key={id} className="landing-limit-row">
-                  <span>{id}</span>
-                  <input
-                    className="landing-glass-control"
-                    type="number"
-                    min={0}
-                    value={doc.settings.styleSendLimits[id] ?? 0}
-                    onChange={(e) =>
-                      setDoc({
-                        ...doc,
-                        settings: {
-                          ...doc.settings,
-                          styleSendLimits: { ...doc.settings.styleSendLimits, [id]: Number(e.target.value) },
-                        },
-                      })
-                    }
-                  />
-                  <small>已发 {doc.runtime.styleSendUsed[id] ?? 0}</small>
-                </div>
-              ))}
-            </div>
+              <div className="landing-limits-grid">
+                {LANDING_STYLE_IDS.map((id) => (
+                  <div key={id} className="landing-limit-row">
+                    <span>{id}</span>
+                    <input
+                      className="landing-glass-control"
+                      type="number"
+                      min={0}
+                      value={doc.settings.styleSendLimits[id] ?? 0}
+                      onChange={(e) =>
+                        setDoc({
+                          ...doc,
+                          settings: {
+                            ...doc.settings,
+                            styleSendLimits: { ...doc.settings.styleSendLimits, [id]: Number(e.target.value) },
+                          },
+                        })
+                      }
+                    />
+                    <small>已发 {doc.runtime.styleSendUsed[id] ?? 0}</small>
+                  </div>
+                ))}
+              </div>
             </section>
             <section className="landing-settings-group">
               <h3 className="landing-settings-group__title">域名仓库</h3>
-            <label className="landing-field-label">域名 / 泛域名（每行一个，如 a.com 或 *.b.com）</label>
-            <textarea
-              className="landing-glass-control batch-input"
-              rows={5}
-              value={doc.settings.domainsText}
-              onChange={(e) => setDoc({ ...doc, settings: { ...doc.settings, domainsText: e.target.value } })}
-            />
+              <label className="landing-field-label">域名 / 泛域名（每行一个，如 a.com 或 *.b.com）</label>
+              <textarea
+                className="landing-glass-control batch-input"
+                rows={5}
+                value={doc.settings.domainsText}
+                onChange={(e) => setDoc({ ...doc, settings: { ...doc.settings, domainsText: e.target.value } })}
+              />
             </section>
           </div>
-          <div className="action-row landing-settings-actions landing-panel__foot">
+          <footer className="lp-zone__foot action-row landing-settings-actions">
             <button type="button" className="run-button" disabled={busy} onClick={() => void saveSettings({ ...doc.settings })}>
               保存设置
             </button>
@@ -620,19 +614,18 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
             >
               <RefreshCw size={14} /> 群发取链（扣次）
             </button>
-          </div>
+          </footer>
         </section>
-        </div>
       </div>
 
-      <section className="landing-panel landing-gallery landing-gallery--dock">
-        <div className="landing-panel__head landing-gallery-header">
-          <span className="landing-panel__badge">04</span>
+      <section className="lp-dock">
+        <header className="lp-dock__head">
+          <span className="lp-zone__badge">04</span>
           <div>
-            <p className="section-kicker">Gallery</p>
+            <p className="lp-zone__kicker">Gallery</p>
             <h2>模板图册</h2>
           </div>
-          <div className="landing-gallery-header-actions">
+          <div className="lp-dock__actions">
             <input
               ref={zipTemplateInputRef}
               type="file"
@@ -660,12 +653,7 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
                 })();
               }}
             />
-            <button
-              type="button"
-              className="run-button"
-              disabled={busy}
-              onClick={() => zipTemplateInputRef.current?.click()}
-            >
+            <button type="button" className="run-button" disabled={busy} onClick={() => zipTemplateInputRef.current?.click()}>
               <Upload size={16} /> 上传模板
             </button>
             <button
@@ -678,9 +666,9 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
               <Trash2 size={16} /> 删除模板
             </button>
           </div>
-        </div>
+        </header>
 
-        <div className="landing-gallery-link-panel">
+        <div className="lp-dock__body">
           <p className="landing-gallery-link-intro">添加方式二选一：上传 ZIP 包，或填写链接后按该网页样式在预览中复刻（iframe）。</p>
           <div className="landing-gallery-link-row">
             <input className="landing-glass-control" placeholder="模板名称" value={urlTplName} onChange={(e) => setUrlTplName(e.target.value)} />
@@ -711,10 +699,10 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
               添加链接模板
             </button>
           </div>
-          <p className="muted-copy landing-gallery-scroll-hint">下方模板卡片区域可<strong>左右滑动</strong>查看更多；首次选中自定义模板会自动截取首页作为封面。</p>
+          <p className="landing-gallery-scroll-hint">模板卡片可<strong>左右滑动</strong>；首次选中自定义模板会自动截取首页作为封面。</p>
         </div>
 
-        <div className="landing-gallery-scroll" role="region" aria-label="模板列表，可横向滚动">
+        <div className="lp-dock__strip" role="region" aria-label="模板列表，可横向滚动">
           <div className="landing-gallery-strip">
             {LANDING_GALLERY.map((item) => (
               <button
@@ -762,4 +750,5 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
       </section>
     </div>
   );
+
 }
