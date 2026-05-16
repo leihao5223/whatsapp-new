@@ -104,16 +104,46 @@ export const closeSharedPlaywrightBrowser = async () => {
   }
 };
 
+const normalizeDigits = (value) => String(value ?? '').replace(/\D/g, '');
+
+/**
+ * 旧逻辑：在整页正文中匹配任意 5–12 位数字且 ≠ 手机号，极易把页脚客服号、统计 ID 等误判为 QQ，导致「全部命中」。
+ * 新逻辑：仅在出现明确 QQ 语义（标签 / JSON 字段 p）时才认作命中，否则视为未命中。
+ */
 const inferResult = (text, phone) => {
+  const phoneNorm = normalizeDigits(phone);
   const corpus = String(text ?? '').replace(/\s+/g, ' ').trim();
-  const qqCandidates = corpus.match(/\b\d{5,12}\b/g) ?? [];
-  const qq = qqCandidates.find((candidate) => candidate !== phone);
-  const opened = Boolean(qq);
-  return {
-    opened,
-    qq: opened ? qq : '',
-    rawText: corpus.slice(0, 800),
+  const rawText = corpus.slice(0, 800);
+
+  const acceptQq = (raw) => {
+    const q = normalizeDigits(raw);
+    if (!q || q.length < 5 || q.length > 12) {
+      return null;
+    }
+    if (q === phoneNorm) {
+      return null;
+    }
+    if (phoneNorm.length >= 6 && (phoneNorm.includes(q) || q.includes(phoneNorm))) {
+      return null;
+    }
+    return q;
   };
+
+  const labeled = corpus.match(/(?:^|[\s"'“”‘’，,;；])(?:qq|QQ)[:：\s]*(\d{5,12})(?=\D|$)/);
+  if (labeled) {
+    const q = acceptQq(labeled[1]);
+    if (q) {
+      return { opened: true, qq: q, rawText };
+    }
+  }
+  const jsonP = corpus.match(/["']p["']\s*:\s*["']?(\d{5,12})["']?/);
+  if (jsonP) {
+    const q = acceptQq(jsonP[1]);
+    if (q) {
+      return { opened: true, qq: q, rawText };
+    }
+  }
+  return { opened: false, qq: '', rawText };
 };
 
 /**

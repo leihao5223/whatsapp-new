@@ -777,6 +777,12 @@ export async function handleLandingRequest({ req, res, pathname, method, readBod
     return true;
   }
 
+  if (method === 'GET' && pathname === '/landing/settings') {
+    const doc = await loadDoc(root, effectiveUserId);
+    sendJson(res, 200, { success: true, data: doc.settings, updatedAt: doc.updatedAt });
+    return true;
+  }
+
   if (method === 'PUT' && pathname === '/landing/settings') {
     const body = JSON.parse((await readBody(req)) || '{}');
     const doc = await loadDoc(root, effectiveUserId);
@@ -857,7 +863,11 @@ export async function handleLandingRequest({ req, res, pathname, method, readBod
   if (method === 'POST' && pathname === '/landing/send/next') {
     const doc = await loadDoc(root, effectiveUserId);
     const { ok } = parseDomains(doc.settings.domainsText);
-    const order = [...LANDING_STYLE_IDS].sort(() => randomInt(0, 3) - 1);
+    const order = [...LANDING_STYLE_IDS];
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = randomInt(0, i);
+      [order[i], order[j]] = [order[j], order[i]];
+    }
     let picked = '';
     for (const sid of order) {
       const limit = doc.settings.styleSendLimits[sid] ?? 0;

@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { type ChangeEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import './styles.css';
+import { formatBatchResultsCsv, formatBatchResultsTsv, mapBatchRecordsToRows, type BatchResultRow } from './batch/formatResults';
 import LandingPageView from './landing/LandingPageView';
 
 type PageKey = 'dashboard' | 'data' | 'accounts' | 'ipPool' | 'landing' | 'runner' | 'security';
@@ -67,12 +68,7 @@ type SearchStats = {
   pending: number;
 };
 
-type BatchRow = {
-  phone: string;
-  qq: string;
-  query_time: string;
-  retry_count: number;
-};
+type BatchRow = BatchResultRow;
 
 type BatchStatus = {
   id: string;
@@ -86,8 +82,24 @@ type BatchStatus = {
   httpConcurrencyPerWorker?: number;
   directCount?: number;
   fallbackCount?: number;
-  records?: Array<{ phone: string; qq: string; opened: boolean; retry_count: number; error?: string }>;
-  sample?: Array<{ phone: string; qq: string; opened: boolean; retry_count: number; error?: string }>;
+  records?: Array<{
+    phone: string;
+    qq: string;
+    opened: boolean;
+    retry_count: number;
+    path?: string;
+    error?: string;
+    error_type?: string;
+    query_time?: string;
+  }>;
+  sample?: Array<{
+    phone: string;
+    qq: string;
+    opened: boolean;
+    retry_count: number;
+    path?: string;
+    error?: string;
+  }>;
 };
 
 type PortRuntimeRow = {
@@ -228,7 +240,9 @@ type BatchRecord = {
   qq: string;
   opened: boolean;
   retry_count: number;
+  path?: string;
   error?: string;
+  error_type?: string;
   query_time?: string;
 };
 
@@ -1105,6 +1119,9 @@ function App() {
     }
     const data = (await response.json()) as BatchStatus & { success?: boolean };
     setBatchStatus(data);
+    if (data.records?.length) {
+      setBatchRows(mapBatchRecordsToRows(data.records));
+    }
     const currentPortOrder = batchPortOrderRef.current;
     const currentDistributionPlan = distributionPlanRef.current;
     const currentPhonePortMap = phonePortMapRef.current;
@@ -1360,24 +1377,29 @@ function App() {
     if (!batchId) {
       return;
     }
-    const response = await fetch(runtimeBatchUrl(runtimeBaseUrl, `/batch/${batchId}/export?format=json`), {
-      headers: batchAuthHeaders(authToken),
-    });
-    if (!response.ok) {
-      throw new Error(`批次导出失败：${response.status}`);
+    let records = batchStatus?.records;
+    if (!records?.length) {
+      const response = await fetch(runtimeBatchUrl(runtimeBaseUrl, `/batch/${batchId}/status`), {
+        headers: batchAuthHeaders(authToken),
+      });
+      if (!response.ok) {
+        throw new Error(`批次状态获取失败：${response.status}`);
+      }
+      const data = (await response.json()) as BatchStatus;
+      records = data.records;
+      setBatchStatus(data);
     }
-    const data = (await response.json()) as { rows?: BatchRow[] };
-    const rows = data.rows ?? [];
+    const rows = mapBatchRecordsToRows(records ?? []);
     setBatchRows(rows);
-    const headers = ['手机号', 'QQ号', '查询时间', '重试次数'];
-    const csv = [headers, ...rows.map((row) => [row.phone, row.qq, row.query_time, row.retry_count])]
-      .map((line) => line.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-      .join('\n');
-    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
+    if (!rows.length) {
+      setRunnerNotice('暂无可导出的识别结果');
+      return;
+    }
+    const blob = new Blob([formatBatchResultsCsv(rows)], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `batch-hits-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `batch-results-${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -3072,9 +3094,11 @@ function RunnerPage({
   const fallbackRatio = batchStatus?.processed ? Math.round((fallbackCount / Math.max(1, batchStatus.processed)) * 100) : 0;
   const runtimePortMap = new Map(portRuntimeRows.map((row) => [row.portId, row]));
   const latestRecord = (batchStatus?.records?.[batchStatus.records.length - 1] as BatchRecord | undefined) ?? undefined;
-  const mergedOutputText = (batchStatus?.records ?? [])
-    .map((row) => (row.opened && row.qq ? `${row.phone}：${row.qq}` : `${row.phone}：无结果`))
-    .join('\n');
+  const resultRows = useMemo(
+    () => (batchRows.length ? batchRows : mapBatchRecordsToRows(batchStatus?.records ?? [])),
+    [batchRows, batchStatus?.records],
+  );
+  const mergedOutputText = useMemo(() => formatBatchResultsTsv(resultRows), [resultRows]);
 
   const parseDedicatedAssignments = () => {
     const map: Record<string, string> = {};
@@ -3333,7 +3357,7 @@ function RunnerPage({
             集体停止
           </button>
           <button className="soft-button" type="button" onClick={() => void exportBatchRows()} disabled={!batchId}>
-            导出命中结果
+            导出识别结果表
           </button>
         </div>
         {selfCheckSummary ? <div className="connector-note">{selfCheckSummary}</div> : null}
@@ -3374,26 +3398,35 @@ function RunnerPage({
           </div>
         ) : null}
         {runnerNotice ? <div className="connector-note">{runnerNotice}</div> : null}
-        <div className="connector-note">汇总文本输出（所有窗口结果合并到同一文本）</div>
-        <textarea className="batch-input" value={mergedOutputText} readOnly placeholder="筛选后会在这里统一输出：手机号：QQ号 / 手机号：无结果" />
-        {batchRows.length ? (
-          <div className="table-wrap">
-            <table>
+        <div className="connector-note">识别结果表（任务结束后自动汇总，格式与导出 CSV 一致）</div>
+        <textarea
+          className="batch-input batch-input--results"
+          value={mergedOutputText}
+          readOnly
+          placeholder="识别完成后在此显示：序号、手机号、命中、QQ、识别路径、备注"
+        />
+        {resultRows.length ? (
+          <div className="table-wrap batch-results-table-wrap">
+            <table className="batch-results-table">
               <thead>
                 <tr>
+                  <th>序号</th>
                   <th>手机号</th>
-                  <th>QQ号</th>
-                  <th>查询时间</th>
-                  <th>重试次数</th>
+                  <th>命中</th>
+                  <th>QQ</th>
+                  <th>识别路径</th>
+                  <th>备注</th>
                 </tr>
               </thead>
               <tbody>
-                {batchRows.slice(0, 50).map((row) => (
-                  <tr key={`${row.phone}-${row.query_time}`}>
+                {resultRows.map((row) => (
+                  <tr key={`${row.index}-${row.phone}`} className={row.hit ? 'batch-results-table__row--hit' : undefined}>
+                    <td>{row.index}</td>
                     <td>{row.phone}</td>
+                    <td>{row.hitLabel}</td>
                     <td>{row.qq}</td>
-                    <td>{row.query_time}</td>
-                    <td>{row.retry_count}</td>
+                    <td>{row.path}</td>
+                    <td>{row.note || '—'}</td>
                   </tr>
                 ))}
               </tbody>

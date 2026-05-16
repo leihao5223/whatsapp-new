@@ -874,8 +874,11 @@ const createBatchTask = (phones) => {
 };
 
 const toCsv = (rows) => {
-  const headers = ['phone', 'qq', 'query_time', 'retry_count'];
-  const payload = [headers, ...rows.map((row) => [row.phone, row.qq, row.query_time, row.retry_count])];
+  const headers = ['序号', '手机号', '命中', 'QQ', '识别路径', '备注'];
+  const payload = [
+    headers,
+    ...rows.map((row) => [row.index, row.phone, row.hit, row.qq, row.path, row.note]),
+  ];
   return payload.map((row) => row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
 };
 

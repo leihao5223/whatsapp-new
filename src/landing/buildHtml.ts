@@ -95,6 +95,9 @@ a{color:inherit;}
 .lp-photo{width:100%;border-radius:16px;display:block;}
 @media print{
   body{background:#fff;color:#111;}
+  .lp-wrap{max-width:100%;}
+  .lp-band{break-inside:avoid;page-break-inside:avoid;}
+  .lp-card,.lp-kpi{break-inside:avoid;}
   .lp-cta{box-shadow:none;border:1px solid #ccc;color:#111;background:#f3f4f6;}
 }`;
 

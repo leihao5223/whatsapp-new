@@ -1,4 +1,4 @@
-import type { LandingDoc } from './types';
+import type { LandingDoc, LandingSettings } from './types';
 
 /**
  * 生产环境常见只反代 `/api/*` 到 Runner；当 runtime 为「本站 origin」且请求 `/landing` 时自动走 `/api/landing`，避免上传 ZIP 等返回 HTML 404。
@@ -27,6 +27,16 @@ export async function landingGetProfile(runtimeBase: string, token: string): Pro
     headers: { Authorization: `Bearer ${token}` },
   });
   return (await r.json()) as { success: boolean; data?: LandingDoc; error?: string };
+}
+
+export async function landingGetSettings(
+  runtimeBase: string,
+  token: string,
+): Promise<{ success: boolean; data?: LandingSettings; updatedAt?: string; error?: string }> {
+  const r = await fetch(joinUrl(runtimeBase, '/landing/settings'), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return (await r.json()) as { success: boolean; data?: LandingSettings; updatedAt?: string; error?: string };
 }
 
 export async function landingPutProfile(

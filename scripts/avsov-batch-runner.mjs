@@ -41,18 +41,6 @@ const decryptTarget = (cipherText, secret) => {
   return decrypted;
 };
 
-const inferResult = (text, phone) => {
-  const corpus = String(text ?? '').replace(/\s+/g, ' ').trim();
-  const qqCandidates = corpus.match(/\b\d{5,12}\b/g) ?? [];
-  const qq = qqCandidates.find((candidate) => candidate !== phone);
-  const opened = Boolean(qq);
-  return {
-    opened,
-    qq: opened ? qq : '',
-    rawText: corpus.slice(0, 800),
-  };
-};
-
 export const isSocks5ProxyFormat = (value) =>
   /^socks5:\/\/(?:[^:@\s]+(?::[^@\s]*)?@)?[a-zA-Z0-9.-]+:\d{2,5}$/.test(String(value ?? '').trim());
 
@@ -270,15 +258,22 @@ export class AvsovBatchRunner {
   }
 }
 
+/** 导出/接口：全部号码，列与控制台识别结果表一致 */
 export const toBatchExportRows = (records) =>
-  records
-    .filter((record) => record.opened && record.qq)
-    .map((record) => ({
+  records.map((record, index) => {
+    const hit = Boolean(record.opened && record.qq);
+    return {
+      index: index + 1,
       phone: record.phone,
-      qq: record.qq,
+      hit: hit ? '是' : '否',
+      qq: hit ? record.qq : '-',
+      path: String(record.path ?? '').trim() || '-',
+      note: record.error ? String(record.error).slice(0, 60) : record.error_type ? String(record.error_type) : '',
       query_time: record.query_time,
       retry_count: record.retry_count,
-    }));
+      opened: record.opened,
+    };
+  });
 
 export const encryptTargetForEnv = (url, secret) => {
   const iv = randomBytes(12);

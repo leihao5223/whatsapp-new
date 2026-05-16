@@ -2015,6 +2015,7 @@ textarea::placeholder {
   flex-direction: column;
   gap: 12px;
   min-height: min(1200px, calc(100dvh - 120px));
+  /* 计划：上约 70% / 下约 30%，用 flex 比例保证视口内分区稳定 */
 }
 
 .landing-notice {
@@ -2025,8 +2026,9 @@ textarea::placeholder {
   display: grid;
   grid-template-columns: minmax(0, 3fr) minmax(0, 4fr) minmax(0, 3fr);
   gap: 12px;
-  flex: 1 1 70%;
-  min-height: min(720px, 70dvh);
+  flex: 7 1 0%;
+  min-height: min(70dvh, 880px);
+  max-height: min(78dvh, 980px);
   align-items: stretch;
 }
 
@@ -2118,9 +2120,13 @@ textarea::placeholder {
 }
 
 .landing-gallery {
-  flex: 0 0 auto;
-  min-height: min(360px, 30dvh);
+  flex: 3 1 0%;
+  min-height: min(30dvh, 420px);
+  max-height: min(38dvh, 560px);
   min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .landing-gallery-header.panel__header,
@@ -2247,6 +2253,35 @@ textarea::placeholder {
 .landing-gallery-card small {
   font-size: 0.72rem;
   opacity: 0.75;
+}
+
+.batch-input--results {
+  min-height: 160px;
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  white-space: pre;
+}
+
+.batch-results-table-wrap {
+  max-height: min(52vh, 520px);
+  overflow: auto;
+}
+
+.batch-results-table {
+  font-size: 0.86rem;
+}
+
+.batch-results-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: rgba(15, 23, 42, 0.95);
+}
+
+.batch-results-table__row--hit td:nth-child(3) {
+  color: #4ade80;
+  font-weight: 700;
 }
 
 @media (max-width: 1280px) {
