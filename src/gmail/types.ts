@@ -1,17 +1,23 @@
-export type GmailLoginStatus = 'logged_out' | 'logged_in' | 'logging_in' | 'failed';
+export type GmailLoginStatus =
+  | 'logged_out'
+  | 'logged_in'
+  | 'logging_in'
+  | 'needs_code'
+  | 'needs_approve'
+  | 'failed';
 
 export type GmailAccountRow = {
   id: string;
   email: string;
   password?: string;
   note?: string;
-  lastStatus?: string;
-  lastMessage?: string;
-  lastRunAt?: string;
   loginStatus?: GmailLoginStatus | string;
   loginMessage?: string;
   loggedInAt?: string;
   sessionActive?: boolean;
+  hasNewMail?: boolean;
+  inboxFingerprint?: string;
+  inboxUnreadCount?: number;
 };
 
 export type GmailSettings = {
@@ -19,8 +25,6 @@ export type GmailSettings = {
   delayBetweenSec: number;
   updateAvatar: boolean;
   autoLoginOnSave?: boolean;
-  /** @deprecated 已固定后台自动登录，界面不再展示 */
-  headless?: boolean;
 };
 
 export type GmailInboxMessage = {
@@ -60,4 +64,13 @@ export type GmailBatchTask = {
   records: Array<{ email: string; ok: boolean; message: string }>;
   error?: string;
   newDisplayName?: string;
+};
+
+export type GmailLoginResult = {
+  success: boolean;
+  status: string;
+  hint: string;
+  sessionActive?: boolean;
+  account?: GmailAccountRow;
+  error?: string;
 };

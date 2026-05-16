@@ -3120,7 +3120,10 @@ textarea::placeholder {
   padding: 10px 14px;
   border-radius: 12px;
   border: 1px solid rgba(163, 255, 234, 0.35);
-  background: rgba(2, 32, 34, 0.72);
+  background: rgba(2, 32, 34, 0.92);
+  color: #eafffb !important;
+  z-index: 30;
+  flex-shrink: 0;
 }
 
 .gmail-toolbar {
@@ -3447,6 +3450,86 @@ textarea::placeholder {
   margin-top: 8px;
   font-size: 0.7rem;
   text-align: right;
+}
+
+.gmail-page--ports {
+  overflow-y: auto;
+}
+
+.gmail-ports-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.gmail-port-grid {
+  max-height: calc(100dvh - 220px);
+  overflow-y: auto;
+}
+
+.gmail-port-card--in {
+  border-color: rgba(93, 255, 176, 0.45);
+}
+
+.gmail-port-card--new-mail {
+  border-color: rgba(248, 113, 113, 0.75) !important;
+  box-shadow:
+    0 0 0 1px rgba(248, 113, 113, 0.45),
+    0 0 20px rgba(248, 113, 113, 0.25);
+}
+
+.pulse-dot--off {
+  background: rgba(148, 163, 184, 0.5) !important;
+  box-shadow: none !important;
+}
+
+.gmail-port-email {
+  font-size: 0.82rem;
+  font-weight: 700;
+  word-break: break-all;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(2, 32, 34, 0.55);
+  color: #eafffb !important;
+}
+
+.gmail-inbox-btn {
+  width: 100%;
+  justify-content: center;
+  position: relative;
+}
+
+.gmail-new-dot {
+  margin-left: 6px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 0.65rem;
+  background: #f87171;
+  color: #fff !important;
+}
+
+.gmail-verify-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(2, 12, 18, 0.72);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.gmail-verify-modal {
+  width: min(400px, 100%);
+  padding: 20px;
+  border-radius: 16px;
+  border: 1px solid rgba(163, 255, 234, 0.35);
+  background: linear-gradient(160deg, rgba(6, 56, 59, 0.98), rgba(4, 28, 30, 0.96));
+  display: grid;
+  gap: 12px;
+}
+
+.gmail-verify-modal h3 {
+  margin: 0;
+  font-size: 1rem;
 }
 
 @media (max-width: 1280px) {

@@ -1,4 +1,4 @@
-import type { GmailAccountsPayload, GmailBatchTask, GmailInboxPayload } from './types';
+import type { GmailAccountRow, GmailAccountsPayload, GmailBatchTask, GmailInboxPayload, GmailLoginResult } from './types';
 
 const joinUrl = (base: string, path: string) => {
   const p = path.startsWith('/') ? path : `/${path}`;
@@ -23,123 +23,143 @@ const authHeaders = (token: string | undefined, extra?: Record<string, string>) 
   ...extra,
 });
 
-export async function gmailGetAccounts(
-  runtimeBase: string,
-  token?: string,
-): Promise<{ success: boolean; data?: GmailAccountsPayload; error?: string }> {
-  const r = await fetch(joinUrl(runtimeBase, '/gmail/accounts'), {
+async function parseJson<T>(r: Response): Promise<T & { success: boolean; error?: string }> {
+  try {
+    const payload = (await r.json()) as T & { success: boolean; error?: string };
+    if (!r.ok && !payload.error) {
+      payload.success = false;
+      (payload as { error?: string }).error = `请求失败 HTTP ${r.status}`;
+    }
+    return payload;
+  } catch {
+    return { success: false, error: `请求失败 HTTP ${r.status}` } as T & { success: boolean; error?: string };
+  }
+}
+
+export async function gmailGetAccounts(runtimeBase: string, token?: string) {
+  const r = await fetch(joinUrl(runtimeBase, '/gmail/accounts'), { headers: authHeaders(token) });
+  return parseJson<{ data?: GmailAccountsPayload }>(r);
+}
+
+export async function gmailAddPort(runtimeBase: string, token?: string) {
+  const r = await fetch(joinUrl(runtimeBase, '/gmail/accounts/add'), {
+    method: 'POST',
     headers: authHeaders(token),
   });
-  return (await r.json()) as { success: boolean; data?: GmailAccountsPayload; error?: string };
+  return parseJson<{ account?: GmailAccountRow }>(r);
+}
+
+export async function gmailPatchAccount(
+  runtimeBase: string,
+  token: string | undefined,
+  accountId: string,
+  body: { email?: string; password?: string; note?: string },
+) {
+  const r = await fetch(joinUrl(runtimeBase, `/gmail/accounts/${encodeURIComponent(accountId)}`), {
+    method: 'PATCH',
+    headers: authHeaders(token, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  });
+  return parseJson<{ account?: GmailAccountRow }>(r);
+}
+
+export async function gmailDeleteAccount(runtimeBase: string, token: string | undefined, accountId: string) {
+  const r = await fetch(joinUrl(runtimeBase, `/gmail/accounts/${encodeURIComponent(accountId)}`), {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+  return parseJson<Record<string, never>>(r);
+}
+
+export async function gmailLoginAccount(
+  runtimeBase: string,
+  token: string | undefined,
+  accountId: string,
+  body: { email: string; password: string },
+): Promise<GmailLoginResult> {
+  const r = await fetch(joinUrl(runtimeBase, `/gmail/accounts/${encodeURIComponent(accountId)}/login`), {
+    method: 'POST',
+    headers: authHeaders(token, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  });
+  return parseJson<GmailLoginResult>(r);
+}
+
+export async function gmailLoginStatus(runtimeBase: string, token: string | undefined, accountId: string) {
+  const r = await fetch(joinUrl(runtimeBase, `/gmail/accounts/${encodeURIComponent(accountId)}/login-status`), {
+    headers: authHeaders(token),
+  });
+  return parseJson<GmailLoginResult>(r);
+}
+
+export async function gmailVerifyAccount(
+  runtimeBase: string,
+  token: string | undefined,
+  accountId: string,
+  body: { code?: string; approved?: boolean },
+) {
+  const r = await fetch(joinUrl(runtimeBase, `/gmail/accounts/${encodeURIComponent(accountId)}/verify`), {
+    method: 'POST',
+    headers: authHeaders(token, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  });
+  return parseJson<GmailLoginResult>(r);
+}
+
+export async function gmailCheckNewMail(runtimeBase: string, token?: string) {
+  const r = await fetch(joinUrl(runtimeBase, '/gmail/accounts/check-new-mail'), { headers: authHeaders(token) });
+  return parseJson<{ accounts?: Array<{ id: string; hasNewMail: boolean; unread: number }> }>(r);
+}
+
+export async function gmailFetchInbox(runtimeBase: string, token: string | undefined, accountId: string) {
+  const r = await fetch(joinUrl(runtimeBase, `/gmail/inbox/${encodeURIComponent(accountId)}`), {
+    headers: authHeaders(token),
+  });
+  return parseJson<{ email?: string; inbox?: GmailInboxPayload }>(r);
+}
+
+export async function gmailLogout(runtimeBase: string, token: string | undefined, accountId: string) {
+  const r = await fetch(joinUrl(runtimeBase, '/gmail/logout'), {
+    method: 'POST',
+    headers: authHeaders(token, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ accountId }),
+  });
+  return parseJson<Record<string, never>>(r);
 }
 
 export async function gmailPutAccounts(
   runtimeBase: string,
   token: string | undefined,
   body: Record<string, unknown>,
-): Promise<{ success: boolean; data?: unknown; error?: string; autoLoginTaskId?: string }> {
+) {
   const r = await fetch(joinUrl(runtimeBase, '/gmail/accounts'), {
     method: 'PUT',
     headers: authHeaders(token, { 'Content-Type': 'application/json' }),
     body: JSON.stringify(body),
   });
-  let payload: { success: boolean; data?: unknown; error?: string; autoLoginTaskId?: string };
-  try {
-    payload = (await r.json()) as typeof payload;
-  } catch {
-    return { success: false, error: `保存失败（HTTP ${r.status}）` };
-  }
-  if (!r.ok && !payload.error) {
-    payload.success = false;
-    payload.error = `保存失败（HTTP ${r.status}）`;
-  }
-  return payload;
+  return parseJson<{ data?: unknown; autoLoginTaskId?: string }>(r);
 }
 
-export async function gmailBatchStart(
-  runtimeBase: string,
-  token: string | undefined,
-  body: Record<string, unknown>,
-): Promise<{ success: boolean; taskId?: string; total?: number; error?: string }> {
+export async function gmailBatchStart(runtimeBase: string, token: string | undefined, body: Record<string, unknown>) {
   const r = await fetch(joinUrl(runtimeBase, '/gmail/batch/start'), {
     method: 'POST',
     headers: authHeaders(token, { 'Content-Type': 'application/json' }),
     body: JSON.stringify(body),
   });
-  return (await r.json()) as { success: boolean; taskId?: string; total?: number; error?: string };
+  return parseJson<{ taskId?: string; total?: number }>(r);
 }
 
-export async function gmailBatchStatus(
-  runtimeBase: string,
-  token: string | undefined,
-  taskId: string,
-): Promise<{ success: boolean; task?: GmailBatchTask; error?: string }> {
+export async function gmailBatchStatus(runtimeBase: string, token: string | undefined, taskId: string) {
   const r = await fetch(joinUrl(runtimeBase, `/gmail/batch/${encodeURIComponent(taskId)}/status`), {
     headers: authHeaders(token),
   });
-  return (await r.json()) as { success: boolean; task?: GmailBatchTask; error?: string };
+  return parseJson<{ task?: GmailBatchTask }>(r);
 }
 
-export async function gmailBatchStop(
-  runtimeBase: string,
-  token: string | undefined,
-  taskId: string,
-): Promise<{ success: boolean; error?: string }> {
+export async function gmailBatchStop(runtimeBase: string, token: string | undefined, taskId: string) {
   const r = await fetch(joinUrl(runtimeBase, `/gmail/batch/${encodeURIComponent(taskId)}/stop`), {
     method: 'POST',
     headers: authHeaders(token),
   });
-  return (await r.json()) as { success: boolean; error?: string };
-}
-
-export async function gmailLoginStart(
-  runtimeBase: string,
-  token: string | undefined,
-  body: Record<string, unknown>,
-): Promise<{ success: boolean; taskId?: string; total?: number; error?: string }> {
-  const r = await fetch(joinUrl(runtimeBase, '/gmail/login/start'), {
-    method: 'POST',
-    headers: authHeaders(token, { 'Content-Type': 'application/json' }),
-    body: JSON.stringify(body),
-  });
-  let payload: { success: boolean; taskId?: string; total?: number; error?: string };
-  try {
-    payload = (await r.json()) as typeof payload;
-  } catch {
-    return { success: false, error: `登录接口无响应（HTTP ${r.status}，请检查 /api/gmail 反代）` };
-  }
-  if (!r.ok && !payload.error) {
-    payload.success = false;
-    payload.error = `登录失败（HTTP ${r.status}）`;
-  }
-  return payload;
-}
-
-export async function gmailFetchInbox(
-  runtimeBase: string,
-  token: string | undefined,
-  accountId: string,
-): Promise<{ success: boolean; email?: string; inbox?: GmailInboxPayload; error?: string }> {
-  const r = await fetch(joinUrl(runtimeBase, `/gmail/inbox/${encodeURIComponent(accountId)}`), {
-    headers: authHeaders(token),
-  });
-  return (await r.json()) as {
-    success: boolean;
-    email?: string;
-    inbox?: GmailInboxPayload;
-    error?: string;
-  };
-}
-
-export async function gmailLogout(
-  runtimeBase: string,
-  token: string | undefined,
-  accountId: string,
-): Promise<{ success: boolean; error?: string }> {
-  const r = await fetch(joinUrl(runtimeBase, '/gmail/logout'), {
-    method: 'POST',
-    headers: authHeaders(token, { 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ accountId }),
-  });
-  return (await r.json()) as { success: boolean; error?: string };
+  return parseJson<Record<string, never>>(r);
 }

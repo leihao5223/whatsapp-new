@@ -4,6 +4,13 @@ import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { getSession, listSessionsForUser } from './gmail-session-manager.mjs';
 import {
+  clearPendingLogin,
+  getInteractiveLoginStatus,
+  snapshotInboxUnread,
+  startInteractiveLogin,
+  submitInteractiveVerification,
+} from './gmail-interactive-login.mjs';
+import {
   fetchGmailInbox,
   loginGmailAndKeepSession,
   logoutGmailSession,
@@ -45,6 +52,8 @@ const defaultAccountFields = () => ({
   loginStatus: 'logged_out',
   loginMessage: '',
   loggedInAt: '',
+  hasNewMail: false,
+  inboxFingerprint: '',
 });
 
 /** 支持：邮箱[TAB]密码、邮箱,密码、邮箱 密码（空格） */
@@ -287,13 +296,195 @@ export async function handleGmailRequest({
       data: {
         accounts: doc.accounts.map((a) => ({
           ...a,
-          sessionActive: live.includes(a.id) || a.loginStatus === 'logged_in',
+          sessionActive: live.includes(a.id),
+          loginStatus: live.includes(a.id) ? 'logged_in' : a.loginStatus,
         })),
         settings: doc.settings,
         updatedAt: doc.updatedAt,
         hasAvatar: existsSync(userAvatarPath(root, userId)),
         liveSessions: live,
       },
+    });
+    return true;
+  }
+
+  if (method === 'POST' && pathname === '/gmail/accounts/add') {
+    const doc = await loadDoc(root, userId);
+    const slot = {
+      id: `acc_${randomBytes(4).toString('hex')}`,
+      email: '',
+      password: '',
+      note: '',
+      ...defaultAccountFields(),
+    };
+    doc.accounts.push(slot);
+    await saveDoc(root, doc);
+    sendJson(res, 200, { success: true, account: slot });
+    return true;
+  }
+
+  const accountMatch = pathname.match(/^\/gmail\/accounts\/([^/]+)$/);
+  if (method === 'PATCH' && accountMatch) {
+    const accountId = accountMatch[1];
+    const body = JSON.parse((await readBody(req)) || '{}');
+    const doc = await loadDoc(root, userId);
+    const acc = doc.accounts.find((a) => a.id === accountId);
+    if (!acc) {
+      sendJson(res, 404, { success: false, error: '邮箱端口不存在' });
+      return true;
+    }
+    if (typeof body.email === 'string') {
+      acc.email = body.email.trim().slice(0, 200);
+    }
+    if (typeof body.password === 'string') {
+      acc.password = body.password;
+    }
+    if (typeof body.note === 'string') {
+      acc.note = body.note.slice(0, 200);
+    }
+    await saveDoc(root, doc);
+    sendJson(res, 200, { success: true, account: acc });
+    return true;
+  }
+
+  if (method === 'DELETE' && accountMatch) {
+    const accountId = accountMatch[1];
+    const doc = await loadDoc(root, userId);
+    const before = doc.accounts.length;
+    doc.accounts = doc.accounts.filter((a) => a.id !== accountId);
+    if (doc.accounts.length === before) {
+      sendJson(res, 404, { success: false, error: '邮箱端口不存在' });
+      return true;
+    }
+    await logoutGmailSession(userId, accountId);
+    await clearPendingLogin(userId, accountId);
+    await saveDoc(root, doc);
+    sendJson(res, 200, { success: true });
+    return true;
+  }
+
+  const loginMatch = pathname.match(/^\/gmail\/accounts\/([^/]+)\/login$/);
+  if (method === 'POST' && loginMatch) {
+    const accountId = loginMatch[1];
+    const doc = await loadDoc(root, userId);
+    const acc = doc.accounts.find((a) => a.id === accountId);
+    if (!acc) {
+      sendJson(res, 404, { success: false, error: '邮箱端口不存在' });
+      return true;
+    }
+    const body = JSON.parse((await readBody(req)) || '{}');
+    if (typeof body.email === 'string' && body.email.trim()) {
+      acc.email = body.email.trim();
+    }
+    if (typeof body.password === 'string') {
+      acc.password = body.password;
+    }
+    if (!acc.email?.includes('@') || !acc.password) {
+      sendJson(res, 400, { success: false, error: '请填写邮箱和密码' });
+      return true;
+    }
+    acc.loginStatus = 'logging_in';
+    acc.loginMessage = '正在登录…';
+    await saveDoc(root, doc);
+
+    const profRoot = profilesRoot(root, userId);
+    const result = await startInteractiveLogin({
+      userId,
+      accountId,
+      email: acc.email,
+      password: acc.password,
+      profilesRoot: profRoot,
+    });
+
+    acc.loginStatus = result.status;
+    acc.loginMessage = result.hint;
+    if (result.status === 'logged_in') {
+      acc.loggedInAt = new Date().toISOString();
+      acc.hasNewMail = false;
+    }
+    await saveDoc(root, doc);
+    sendJson(res, 200, { success: true, ...result, account: acc });
+    return true;
+  }
+
+  const loginStatusMatch = pathname.match(/^\/gmail\/accounts\/([^/]+)\/login-status$/);
+  if (method === 'GET' && loginStatusMatch) {
+    const accountId = loginStatusMatch[1];
+    const doc = await loadDoc(root, userId);
+    const acc = doc.accounts.find((a) => a.id === accountId);
+    if (!acc) {
+      sendJson(res, 404, { success: false, error: '邮箱端口不存在' });
+      return true;
+    }
+    const profRoot = profilesRoot(root, userId);
+    const result = await getInteractiveLoginStatus(userId, accountId, profRoot);
+    acc.loginStatus = result.status;
+    acc.loginMessage = result.hint;
+    if (result.status === 'logged_in') {
+      acc.loggedInAt = new Date().toISOString();
+    }
+    await saveDoc(root, doc);
+    sendJson(res, 200, { success: true, ...result, account: acc });
+    return true;
+  }
+
+  const verifyMatch = pathname.match(/^\/gmail\/accounts\/([^/]+)\/verify$/);
+  if (method === 'POST' && verifyMatch) {
+    const accountId = verifyMatch[1];
+    const body = JSON.parse((await readBody(req)) || '{}');
+    const doc = await loadDoc(root, userId);
+    const acc = doc.accounts.find((a) => a.id === accountId);
+    if (!acc) {
+      sendJson(res, 404, { success: false, error: '邮箱端口不存在' });
+      return true;
+    }
+    const profRoot = profilesRoot(root, userId);
+    const result = await submitInteractiveVerification({
+      userId,
+      accountId,
+      code: body.code ? String(body.code) : '',
+      approved: Boolean(body.approved),
+      profilesRoot: profRoot,
+      password: acc.password,
+    });
+    acc.loginStatus = result.status;
+    acc.loginMessage = result.hint;
+    if (result.status === 'logged_in') {
+      acc.loggedInAt = new Date().toISOString();
+      acc.hasNewMail = false;
+    }
+    await saveDoc(root, doc);
+    sendJson(res, 200, { success: true, ...result, account: acc });
+    return true;
+  }
+
+  if (method === 'GET' && pathname === '/gmail/accounts/check-new-mail') {
+    const doc = await loadDoc(root, userId);
+    let changed = false;
+    for (const acc of doc.accounts) {
+      const session = getSession(userId, acc.id);
+      if (!session) {
+        continue;
+      }
+      try {
+        const snap = await snapshotInboxUnread(session.page);
+        const prev = acc.inboxFingerprint || '';
+        if (prev && snap.fingerprint !== prev && snap.unread > 0) {
+          acc.hasNewMail = true;
+          changed = true;
+        }
+        acc.inboxFingerprint = snap.fingerprint;
+        acc.inboxUnreadCount = snap.unread;
+      } catch {
+        /* ignore */
+      }
+    }
+    if (changed) {
+      await saveDoc(root, doc);
+    }
+    sendJson(res, 200, {
+      success: true,
+      accounts: doc.accounts.map((a) => ({ id: a.id, hasNewMail: Boolean(a.hasNewMail), unread: a.inboxUnreadCount ?? 0 })),
     });
     return true;
   }
@@ -322,6 +513,15 @@ export async function handleGmailRequest({
     try {
       const inbox = await fetchGmailInbox(session.page, 30);
       session.lastUsed = Date.now();
+      try {
+        const snap = await snapshotInboxUnread(session.page);
+        acc.inboxFingerprint = snap.fingerprint;
+        acc.hasNewMail = false;
+        acc.inboxUnreadCount = snap.unread;
+        await saveDoc(root, doc);
+      } catch {
+        /* ignore */
+      }
       sendJson(res, 200, {
         success: true,
         email: acc.email,
@@ -346,9 +546,12 @@ export async function handleGmailRequest({
       return true;
     }
     await logoutGmailSession(userId, accountId);
+    await clearPendingLogin(userId, accountId);
     acc.loginStatus = 'logged_out';
     acc.loginMessage = '已退出';
     acc.loggedInAt = '';
+    acc.hasNewMail = false;
+    acc.inboxFingerprint = '';
     await saveDoc(root, doc);
     sendJson(res, 200, { success: true });
     return true;
