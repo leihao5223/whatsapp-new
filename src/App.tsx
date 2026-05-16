@@ -8,6 +8,7 @@ import {
   Gauge,
   LayoutDashboard,
   LayoutTemplate,
+  Mail,
   Monitor,
   Pause,
   Play,
@@ -23,8 +24,9 @@ import { type ChangeEvent, type ReactNode, useEffect, useMemo, useRef, useState 
 import './styles.css';
 import { formatBatchResultsCsv, formatBatchResultsTsv, mapBatchRecordsToRows, type BatchResultRow } from './batch/formatResults';
 import LandingPageView from './landing/LandingPageView';
+import GmailBatchView from './gmail/GmailBatchView';
 
-type PageKey = 'dashboard' | 'data' | 'accounts' | 'ipPool' | 'landing' | 'runner' | 'security';
+type PageKey = 'dashboard' | 'data' | 'accounts' | 'ipPool' | 'landing' | 'gmail' | 'runner' | 'security';
 type QueryStatus = 'pending' | 'running' | 'matched' | 'empty' | 'failed';
 type PortStatus = 'ready' | 'booting' | 'offline';
 type AccountStatus = 'normal' | 'abnormal';
@@ -429,6 +431,7 @@ const navItems: Array<{ key: PageKey; label: string; desc: string; icon: ReactNo
   { key: 'accounts', label: '端口管理', desc: '端口/IP绑定', icon: <Monitor size={17} /> },
   { key: 'ipPool', label: 'IP池', desc: '导入与绑定', icon: <DatabaseZap size={17} /> },
   { key: 'landing', label: '落地页生成', desc: '模版与导出', icon: <LayoutTemplate size={17} /> },
+  { key: 'gmail', label: '邮箱中心', desc: 'Gmail批量资料', icon: <Mail size={17} /> },
   { key: 'runner', label: '任务管理', desc: '并发分发', icon: <Bot size={17} /> },
   { key: 'security', label: '账号安全', desc: '子账号/审计', icon: <ShieldCheck size={17} /> },
 ];
@@ -1802,6 +1805,8 @@ function App() {
         );
       case 'landing':
         return <LandingPageView runtimeBaseUrl={runtimeBaseUrl} authToken={authToken} />;
+      case 'gmail':
+        return <GmailBatchView runtimeBaseUrl={runtimeBaseUrl} authToken={authToken} />;
       case 'ipPool':
         return (
           <IpPoolPage

@@ -8,6 +8,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { AvsovBatchRunner, checkSingleProxy, isSocks5ProxyFormat, toBatchExportRows } from './avsov-batch-runner.mjs';
 import { AvsovSearchCore, decryptTarget } from './avsov-search-core.mjs';
 import { handleLandingRequest } from './landing-handlers.mjs';
+import { handleGmailRequest } from './gmail-handlers.mjs';
 
 const jsonHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -1569,6 +1570,20 @@ const server = createServer(async (req, res) => {
       projectRoot: resolve(__dirname, '..'),
     });
     if (landingHandled) {
+      return;
+    }
+
+    const gmailHandled = await handleGmailRequest({
+      req,
+      res,
+      pathname,
+      method: req.method,
+      readBody,
+      sendJson,
+      requireBatchAuth,
+      projectRoot: resolve(__dirname, '..'),
+    });
+    if (gmailHandled) {
       return;
     }
 
