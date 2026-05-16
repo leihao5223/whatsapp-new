@@ -8,7 +8,7 @@ import { unzipSync } from 'fflate';
 
 /** @typedef {{ userId: string; username: string; role: string; token?: string }} AuthCtx */
 
-export const LANDING_STYLE_IDS = ['hero-split', 'card-stack', 'minimal-center'];
+export const LANDING_STYLE_IDS = ['premium-scroll', 'hero-split', 'card-stack', 'minimal-center'];
 
 const MAX_HISTORY = 50;
 
@@ -229,6 +229,7 @@ const ALLOWED_ZIP_EXT = new Set([
   '.txt',
   '.md',
   '.xml',
+  '.webmanifest',
 ]);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -325,7 +326,12 @@ const pickHtmlEntry = (names) => {
 };
 
 const unzipLandingZip = (buf) => {
-  const out = unzipSync(buf);
+  let out;
+  try {
+    out = unzipSync(buf);
+  } catch (e) {
+    throw new Error(`ZIP 解压失败（可能为加密或损坏）：${String(e?.message ?? e)}`);
+  }
   let total = 0;
   /** @type {Record<string, Buffer>} */
   const files = {};
@@ -334,7 +340,13 @@ const unzipLandingZip = (buf) => {
     if (relPosix.endsWith('/')) {
       continue;
     }
+    if (relPosix.startsWith('__MACOSX/') || relPosix.includes('/__MACOSX/')) {
+      continue;
+    }
     const base = relPosix.split('/').pop() ?? '';
+    if (base.startsWith('._')) {
+      continue;
+    }
     const ext = base.includes('.') ? `.${base.split('.').pop()?.toLowerCase() ?? ''}` : '';
     if (!ALLOWED_ZIP_EXT.has(ext) && !/\.html?$/i.test(base)) {
       continue;
@@ -356,36 +368,57 @@ const unzipLandingZip = (buf) => {
 
 const readZipMultipart = (req) =>
   new Promise((resolve, reject) => {
-    const bb = busboy({ headers: req.headers, limits: { fileSize: MAX_ZIP_BYTES } });
-    /** @type {Buffer | null} */
-    let zipBuf = null;
+    const bb = busboy({ headers: req.headers, limits: { fileSize: MAX_ZIP_BYTES, fields: 32 } });
     let displayName = 'ZIP 模板';
+    let fileSeen = false;
+    let settled = false;
+    const finish = (err, data) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (err) {
+        reject(err);
+      } else {
+        resolve(data);
+      }
+    };
+
     bb.on('field', (name, val) => {
       if (name === 'name') {
         displayName = String(val).trim().slice(0, 80) || displayName;
       }
     });
+
     bb.on('file', (fieldname, file) => {
       if (fieldname !== 'file') {
         file.resume();
         return;
       }
+      fileSeen = true;
       const chunks = [];
       file.on('data', (d) => chunks.push(d));
-      file.on('limit', () => reject(new Error('ZIP exceeds size limit')));
-      file.on('error', reject);
+      file.on('limit', () => finish(new Error('ZIP 超过大小限制（最大约 26MB）')));
+      file.on('error', (e) => finish(e));
       file.on('end', () => {
-        zipBuf = Buffer.concat(chunks);
+        const zipBuf = Buffer.concat(chunks);
+        if (zipBuf.length < 22) {
+          finish(new Error('ZIP 文件为空或过短'));
+          return;
+        }
+        finish(null, { zipBuf, displayName });
       });
     });
-    bb.on('error', reject);
+
+    bb.on('error', (e) => finish(e));
     bb.on('finish', () => {
-      if (!zipBuf || zipBuf.length < 22) {
-        reject(new Error('Missing or empty ZIP'));
-        return;
-      }
-      resolve({ zipBuf, displayName });
+      queueMicrotask(() => {
+        if (!settled && !fileSeen) {
+          finish(new Error('未收到 ZIP 文件：请确认表单字段名为 file，且 Content-Type 为 multipart/form-data'));
+        }
+      });
     });
+
     req.pipe(bb);
   });
 
@@ -720,6 +753,15 @@ export async function handleLandingRequest({ req, res, pathname, method, readBod
         sendJson(res, 400, { success: false, error: 'Invalid logo base64' });
         return true;
       }
+      if (buf.length < 8) {
+        sendJson(res, 400, { success: false, error: 'Logo 解码失败，请使用有效 PNG 文件' });
+        return true;
+      }
+      const pngSig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+      if (Buffer.compare(buf.subarray(0, 8), pngSig) !== 0) {
+        sendJson(res, 400, { success: false, error: 'Logo 须为标准 PNG 图片（文件头校验未通过）' });
+        return true;
+      }
       if (buf.length > 2_500_000) {
         sendJson(res, 400, { success: false, error: 'Logo too large' });
         return true;
@@ -788,7 +830,10 @@ export async function handleLandingRequest({ req, res, pathname, method, readBod
       return true;
     }
     const buf = await readFile(lp);
-    res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'private, max-age=120' });
+    res.writeHead(200, {
+      'Content-Type': 'image/png',
+      'Cache-Control': 'private, no-store, must-revalidate',
+    });
     res.end(buf);
     return true;
   }

@@ -5,7 +5,7 @@ export type GalleryItem = {
   thumb: string;
 };
 
-export const LANDING_STYLE_IDS = ['hero-split', 'card-stack', 'minimal-center'] as const;
+export const LANDING_STYLE_IDS = ['premium-scroll', 'hero-split', 'card-stack', 'minimal-center'] as const;
 
 export const LANDING_GALLERY: GalleryItem[] = [
   { id: 'gallery-aurora', name: '极光', accent: '#22d3ee', thumb: 'linear-gradient(135deg,#042c31,#22d3ee)' },

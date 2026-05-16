@@ -2003,7 +2003,9 @@ textarea::placeholder {
 .landing-preview-frame {
   display: block;
   width: 100%;
+  height: min(74vh, 860px);
   min-height: 420px;
+  max-height: 920px;
   border: 0;
   background: #070b12;
 }

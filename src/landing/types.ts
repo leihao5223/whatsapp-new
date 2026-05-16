@@ -1,6 +1,6 @@
 export type LandingButtonType = 'app' | 'service' | 'site';
 
-export type LandingStyleId = 'hero-split' | 'card-stack' | 'minimal-center';
+export type LandingStyleId = 'premium-scroll' | 'hero-split' | 'card-stack' | 'minimal-center';
 
 export type LandingProfile = {
   projectName: string;

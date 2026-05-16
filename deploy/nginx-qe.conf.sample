@@ -8,6 +8,7 @@ upstream qe_runner_upstream {
 }
 
 server {
+    client_max_body_size 50m;
     listen 80;
     listen [::]:80;
     server_name YOUR_DOMAIN_OR_IP;

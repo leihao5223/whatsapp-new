@@ -57,7 +57,7 @@ const defaultDoc = (): LandingDoc => ({
   },
   runtime: {
     currentTemplateId: 'gallery-aurora',
-    historyStack: [{ styleId: 'hero-split', seed: 10001 }],
+    historyStack: [{ styleId: 'premium-scroll', seed: 10001 }],
     historyIndex: 0,
     styleSendUsed: Object.fromEntries(LANDING_STYLE_IDS.map((id) => [id, 0])) as Record<string, number>,
   },
@@ -101,11 +101,11 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
     return null;
   }, [authToken, runtimeBaseUrl, selectedCustom]);
 
-  const refreshLogo = useCallback(async () => {
+  const refreshLogo = useCallback(async (cacheBust?: string) => {
     if (!authToken) {
       return;
     }
-    const url = await fetchLogoDataUrl(runtimeBaseUrl, authToken);
+    const url = await fetchLogoDataUrl(runtimeBaseUrl, authToken, cacheBust);
     setLogoDataUrl(url);
   }, [authToken, runtimeBaseUrl]);
 
@@ -175,9 +175,9 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
     return buildLandingHtml({ doc, logoDataUrl, accentHex });
   }, [doc, logoDataUrl, accentHex, previewRemoteSrc]);
 
-  const saveProfile = async (patch: Record<string, unknown>) => {
+  const saveProfile = async (patch: Record<string, unknown>): Promise<boolean> => {
     if (!authToken || !doc) {
-      return;
+      return false;
     }
     setBusy(true);
     setNotice('');
@@ -185,10 +185,11 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
       const res = await landingPutProfile(runtimeBaseUrl, authToken, patch);
       if (!res.success || !res.data) {
         setNotice(res.error ?? '保存失败');
-        return;
+        return false;
       }
       setDoc(res.data);
-      await refreshLogo();
+      await refreshLogo(String(res.data.updatedAt ?? Date.now()));
+      return true;
     } finally {
       setBusy(false);
     }
@@ -295,15 +296,26 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
 
   const onLogoFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file || !file.type.includes('png')) {
-      setNotice('请上传 PNG 图片');
+    const looksPng =
+      file &&
+      (file.type === 'image/png' ||
+        file.type === 'image/x-png' ||
+        file.type === 'application/x-png' ||
+        (!file.type && /\.png$/i.test(file.name)));
+    if (!file || !looksPng) {
+      setNotice('请上传 PNG 图片（.png）；若已选 PNG 仍失败，请确认扩展名为 .png');
+      event.target.value = '';
       return;
     }
     const reader = new FileReader();
     reader.onload = async () => {
       const base64 = typeof reader.result === 'string' ? reader.result : '';
       const pure = base64.includes(',') ? base64.split(',')[1] ?? '' : base64;
-      await saveProfile({ logoPngBase64: pure });
+      setLogoDataUrl(base64);
+      const ok = await saveProfile({ logoPngBase64: pure });
+      if (!ok) {
+        await refreshLogo(String(Date.now()));
+      }
     };
     reader.readAsDataURL(file);
     event.target.value = '';
@@ -354,7 +366,7 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
             </div>
             <div className="landing-glass-field">
               <label className="landing-field-label">Logo（PNG）</label>
-              <input type="file" accept="image/png" onChange={(e) => void onLogoFile(e)} />
+              <input type="file" accept="image/png,.png,application/x-png" onChange={(e) => void onLogoFile(e)} />
             </div>
             <div className="landing-glass-field">
               <label className="landing-field-label">按钮类型</label>
@@ -487,7 +499,7 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
               <option value="">不锁定</option>
               {LANDING_STYLE_IDS.map((id) => (
                 <option key={id} value={id}>
-                  {id}
+                  {id === 'premium-scroll' ? '典藏长页（高规格）' : id}
                 </option>
               ))}
             </select>
