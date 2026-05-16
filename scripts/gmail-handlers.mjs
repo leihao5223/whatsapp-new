@@ -2,7 +2,13 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { modifyGmailProfile } from './gmail-profile-runner.mjs';
+import { getSession, listSessionsForUser } from './gmail-session-manager.mjs';
+import {
+  fetchGmailInbox,
+  loginGmailAndKeepSession,
+  logoutGmailSession,
+  modifyGmailProfile,
+} from './gmail-profile-runner.mjs';
 
 /** @typedef {{ userId: string; username: string; role: string }} AuthCtx */
 
@@ -32,7 +38,14 @@ const defaultDoc = (userId) => ({
     delayBetweenSec: 5,
     updateAvatar: true,
     headless: true,
+    autoLoginOnSave: false,
   },
+});
+
+const defaultAccountFields = () => ({
+  loginStatus: 'logged_out',
+  loginMessage: '',
+  loggedInAt: '',
 });
 
 const parseAccountsText = (text) => {
@@ -72,6 +85,7 @@ const loadDoc = async (root, userId) => {
     if (!Array.isArray(doc.accounts)) {
       doc.accounts = [];
     }
+    doc.accounts = doc.accounts.map((a) => ({ ...defaultAccountFields(), ...a }));
     return doc;
   } catch {
     return defaultDoc(userId);
@@ -117,6 +131,104 @@ const pushLog = (task, message) => {
 
 /**
  * @param {object} opts
+ */
+const runLoginBatch = async ({ root, userId, doc, targets, task, headless, delaySec }) => {
+  const profRoot = profilesRoot(root, userId);
+  await mkdir(profRoot, { recursive: true });
+
+  for (let i = 0; i < targets.length; i += 1) {
+    if (task.cancelled) {
+      task.status = 'cancelled';
+      task.finishedAt = new Date().toISOString();
+      pushLog(task, '登录任务已取消');
+      return;
+    }
+
+    const acc = targets[i];
+    task.currentEmail = acc.email;
+    acc.loginStatus = 'logging_in';
+    pushLog(task, `登录 ${i + 1}/${targets.length}: ${acc.email}`);
+
+    try {
+      const result = await loginGmailAndKeepSession({
+        userId,
+        accountId: acc.id,
+        email: acc.email,
+        password: acc.password,
+        profilesRoot: profRoot,
+        headless,
+        onLog: (msg) => pushLog(task, msg),
+      });
+
+      acc.loginStatus = 'logged_in';
+      acc.loginMessage = result.alreadyLoggedIn ? '已登录（会话有效）' : '登录成功，收件箱已确认';
+      acc.loggedInAt = new Date().toISOString();
+      acc.lastStatus = 'login_ok';
+      acc.lastMessage = acc.loginMessage;
+      acc.lastRunAt = acc.loggedInAt;
+      task.success += 1;
+      task.records.push({ email: acc.email, ok: true, message: acc.loginMessage });
+      pushLog(task, `✅ ${acc.email} 已登录`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      acc.loginStatus = 'failed';
+      acc.loginMessage = msg.slice(0, 500);
+      acc.lastStatus = 'login_failed';
+      acc.lastMessage = msg;
+      acc.lastRunAt = new Date().toISOString();
+      task.failed += 1;
+      task.records.push({ email: acc.email, ok: false, message: msg });
+      pushLog(task, `❌ ${acc.email}: ${msg}`);
+    }
+
+    task.processed = i + 1;
+    const idx = doc.accounts.findIndex((a) => a.id === acc.id);
+    if (idx >= 0) {
+      doc.accounts[idx] = { ...acc };
+    }
+    await saveDoc(root, doc);
+
+    if (i < targets.length - 1 && delaySec > 0 && !task.cancelled) {
+      pushLog(task, `等待 ${delaySec}s…`);
+      await new Promise((r) => setTimeout(r, delaySec * 1000));
+    }
+  }
+
+  task.status = task.cancelled ? 'cancelled' : 'completed';
+  task.finishedAt = new Date().toISOString();
+  task.currentEmail = '';
+  pushLog(task, '登录任务完成');
+};
+
+/**
+ * @param {object} opts
+ */
+const queueLoginBatch = ({ root, userId, doc, accountIds, headless, delaySec }) => {
+  let targets = doc.accounts.filter((a) => a.email && a.password);
+  if (accountIds?.length) {
+    targets = targets.filter((a) => accountIds.includes(a.id));
+  }
+  if (!targets.length) {
+    return null;
+  }
+
+  const task = createGmailBatchTask(userId, targets.length);
+  task.kind = 'login';
+  task.status = 'running';
+  task.startedAt = new Date().toISOString();
+
+  void runLoginBatch({ root, userId, doc, targets, task, headless, delaySec }).catch((e) => {
+    task.status = 'failed';
+    task.error = e instanceof Error ? e.message : String(e);
+    task.finishedAt = new Date().toISOString();
+    pushLog(task, `登录批量异常: ${task.error}`);
+  });
+
+  return task.id;
+};
+
+/**
+ * @param {object} opts
  * @returns {Promise<boolean>}
  */
 export async function handleGmailRequest({
@@ -143,15 +255,76 @@ export async function handleGmailRequest({
 
   if (method === 'GET' && pathname === '/gmail/accounts') {
     const doc = await loadDoc(root, userId);
+    const live = listSessionsForUser(userId).map((s) => s.accountId);
     sendJson(res, 200, {
       success: true,
       data: {
-        accounts: doc.accounts,
+        accounts: doc.accounts.map((a) => ({
+          ...a,
+          sessionActive: live.includes(a.id) || a.loginStatus === 'logged_in',
+        })),
         settings: doc.settings,
         updatedAt: doc.updatedAt,
         hasAvatar: existsSync(userAvatarPath(root, userId)),
+        liveSessions: live,
       },
     });
+    return true;
+  }
+
+  const inboxMatch = pathname.match(/^\/gmail\/inbox\/([^/]+)$/);
+  if (method === 'GET' && inboxMatch) {
+    const accountId = inboxMatch[1];
+    const doc = await loadDoc(root, userId);
+    const acc = doc.accounts.find((a) => a.id === accountId);
+    if (!acc) {
+      sendJson(res, 404, { success: false, error: '账号不存在' });
+      return true;
+    }
+    let session = getSession(userId, accountId);
+    if (!session) {
+      if (acc.loginStatus !== 'logged_in' || !acc.password) {
+        sendJson(res, 400, { success: false, error: '该邮箱未登录，请先登录' });
+        return true;
+      }
+      sendJson(res, 400, {
+        success: false,
+        error: '登录会话已过期，请重新登录该邮箱',
+      });
+      return true;
+    }
+    try {
+      const inbox = await fetchGmailInbox(session.page, 30);
+      session.lastUsed = Date.now();
+      sendJson(res, 200, {
+        success: true,
+        email: acc.email,
+        inbox,
+      });
+    } catch (e) {
+      sendJson(res, 500, {
+        success: false,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+    return true;
+  }
+
+  if (method === 'POST' && pathname === '/gmail/logout') {
+    const body = JSON.parse((await readBody(req)) || '{}');
+    const accountId = String(body.accountId ?? '');
+    const doc = await loadDoc(root, userId);
+    const acc = doc.accounts.find((a) => a.id === accountId);
+    if (!acc) {
+      sendJson(res, 404, { success: false, error: '账号不存在' });
+      return true;
+    }
+    await logoutGmailSession(userId, accountId);
+    acc.loginStatus = 'logged_out';
+    acc.loginMessage = '已退出';
+    acc.loggedInAt = '';
+    await saveDoc(root, doc);
+    sendJson(res, 200, { success: true });
     return true;
   }
 
@@ -204,6 +377,9 @@ export async function handleGmailRequest({
       if (typeof body.settings.headless === 'boolean') {
         doc.settings.headless = body.settings.headless;
       }
+      if (typeof body.settings.autoLoginOnSave === 'boolean') {
+        doc.settings.autoLoginOnSave = body.settings.autoLoginOnSave;
+      }
     }
 
     if (typeof body.avatarPngBase64 === 'string' && body.avatarPngBase64.length > 20) {
@@ -232,7 +408,19 @@ export async function handleGmailRequest({
     }
 
     await saveDoc(root, doc);
-    sendJson(res, 200, { success: true, data: doc });
+    const shouldAutoLogin = Boolean(body.autoLogin ?? doc.settings.autoLoginOnSave);
+    let autoLoginTaskId = null;
+    if (shouldAutoLogin && doc.accounts.some((a) => a.email && a.password)) {
+      autoLoginTaskId = queueLoginBatch({
+        root,
+        userId,
+        doc,
+        accountIds: null,
+        headless: doc.settings.headless !== false,
+        delaySec: doc.settings.delayBetweenSec ?? 5,
+      });
+    }
+    sendJson(res, 200, { success: true, data: doc, autoLoginQueued: Boolean(autoLoginTaskId), autoLoginTaskId });
     return true;
   }
 
@@ -276,6 +464,39 @@ export async function handleGmailRequest({
     task.cancelled = true;
     task.status = 'stopping';
     sendJson(res, 200, { success: true, task: { id: task.id, status: task.status } });
+    return true;
+  }
+
+  if (method === 'POST' && pathname === '/gmail/login/start') {
+    const body = JSON.parse((await readBody(req)) || '{}');
+    const doc = await loadDoc(root, userId);
+    const accountIds = Array.isArray(body.accountIds) ? body.accountIds.map((id) => String(id)) : null;
+    const delaySec = Number.isFinite(Number(body.delayBetweenSec))
+      ? Math.min(120, Math.max(0, Number(body.delayBetweenSec)))
+      : doc.settings.delayBetweenSec ?? 5;
+    const headless = typeof body.headless === 'boolean' ? body.headless : doc.settings.headless !== false;
+
+    let targets = doc.accounts.filter((a) => a.email && a.password);
+    if (accountIds?.length) {
+      targets = targets.filter((a) => accountIds.includes(a.id));
+    }
+    if (!targets.length) {
+      sendJson(res, 400, { success: false, error: '没有可登录的账号' });
+      return true;
+    }
+
+    const task = createGmailBatchTask(userId, targets.length);
+    task.kind = 'login';
+    task.status = 'running';
+    task.startedAt = new Date().toISOString();
+    sendJson(res, 200, { success: true, taskId: task.id, total: targets.length });
+
+    void runLoginBatch({ root, userId, doc, targets, task, headless, delaySec }).catch((e) => {
+      task.status = 'failed';
+      task.error = e instanceof Error ? e.message : String(e);
+      task.finishedAt = new Date().toISOString();
+      pushLog(task, `登录批量异常: ${task.error}`);
+    });
     return true;
   }
 

@@ -1,3 +1,5 @@
+export type GmailLoginStatus = 'logged_out' | 'logged_in' | 'logging_in' | 'failed';
+
 export type GmailAccountRow = {
   id: string;
   email: string;
@@ -6,6 +8,10 @@ export type GmailAccountRow = {
   lastStatus?: string;
   lastMessage?: string;
   lastRunAt?: string;
+  loginStatus?: GmailLoginStatus | string;
+  loginMessage?: string;
+  loggedInAt?: string;
+  sessionActive?: boolean;
 };
 
 export type GmailSettings = {
@@ -13,6 +19,21 @@ export type GmailSettings = {
   delayBetweenSec: number;
   updateAvatar: boolean;
   headless: boolean;
+  autoLoginOnSave?: boolean;
+};
+
+export type GmailInboxMessage = {
+  sender: string;
+  subject: string;
+  snippet: string;
+  time: string;
+  unread: boolean;
+};
+
+export type GmailInboxPayload = {
+  fetchedAt: string;
+  count: number;
+  messages: GmailInboxMessage[];
 };
 
 export type GmailAccountsPayload = {
@@ -20,10 +41,12 @@ export type GmailAccountsPayload = {
   settings: GmailSettings;
   updatedAt?: string;
   hasAvatar?: boolean;
+  liveSessions?: string[];
 };
 
 export type GmailBatchTask = {
   id: string;
+  kind?: string;
   status: string;
   total: number;
   processed: number;
