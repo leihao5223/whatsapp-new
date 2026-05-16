@@ -10,6 +10,7 @@ import {
   gmailLogout,
   gmailPutAccounts,
 } from './client';
+import { parseAccountsFromText, validateAccountsText } from './parseAccounts';
 import type { GmailAccountRow, GmailBatchTask, GmailInboxMessage, GmailSettings } from './types';
 
 type Props = {
@@ -143,26 +144,54 @@ export default function GmailBatchView({ runtimeBaseUrl, authToken }: Props) {
   };
 
   const startLogin = async (accountIds?: string[]) => {
+    if (!authToken) {
+      setNotice('请先登录控制台账号');
+      return;
+    }
+    const check = validateAccountsText(accountsText);
+    if (!check.ok) {
+      setNotice(check.message);
+      return;
+    }
     setBusy(true);
-    setNotice('');
+    setNotice('正在保存账号并启动登录…');
+    setTask({
+      id: 'pending',
+      kind: 'login',
+      status: 'running',
+      total: accountIds?.length ?? parseAccountsFromText(accountsText).length,
+      processed: 0,
+      success: 0,
+      failed: 0,
+      createdAt: new Date().toISOString(),
+      logs: ['正在连接 Runner…'],
+      records: [],
+    });
     try {
-      await gmailPutAccounts(runtimeBaseUrl, authToken, { accountsText, settings });
+      const putRes = await gmailPutAccounts(runtimeBaseUrl, authToken, { accountsText, settings });
+      if (!putRes.success) {
+        setNotice(putRes.error ?? '保存账号失败');
+        return;
+      }
       const res = await gmailLoginStart(runtimeBaseUrl, authToken, {
         accountIds,
         delayBetweenSec: settings.delayBetweenSec,
         headless: settings.headless,
       });
       if (!res.success || !res.taskId) {
-        setNotice(res.error ?? '启动登录失败');
+        setNotice(res.error ?? '启动登录失败（请确认 Runner 已启动且 Nginx 已转发 /gmail）');
         return;
       }
       setActiveTaskId(res.taskId);
-      setNotice(`登录任务已启动（${res.total ?? 0} 个账号）`);
+      setNotice(`登录任务已启动（${res.total ?? 0} 个账号），请查看右侧执行日志`);
       startPoll(res.taskId);
       const st = await gmailBatchStatus(runtimeBaseUrl, authToken, res.taskId);
       if (st.task) {
         setTask(st.task);
       }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setNotice(`登录请求失败：${msg}`);
     } finally {
       setBusy(false);
     }
@@ -327,7 +356,7 @@ export default function GmailBatchView({ runtimeBaseUrl, authToken }: Props) {
           </header>
           <div className="gmail-panel__body">
             <p className="gmail-hint">
-              每行：<code>邮箱[TAB]密码</code>。保存后可批量/单个登录；<strong>点击已登录邮箱</strong>查看收件箱悬浮窗。
+              每行：<code>邮箱[TAB]密码</code> 或 <code>邮箱 密码</code>（空格也可）。保存后登录；<strong>点击已登录邮箱</strong>看收件箱。
             </p>
             <textarea
               className="batch-input gmail-accounts-text"

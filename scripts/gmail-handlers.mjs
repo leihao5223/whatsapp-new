@@ -48,6 +48,34 @@ const defaultAccountFields = () => ({
   loggedInAt: '',
 });
 
+/** 支持：邮箱[TAB]密码、邮箱,密码、邮箱 密码（空格） */
+export const parseAccountLine = (line) => {
+  const trimmed = String(line ?? '').trim();
+  if (!trimmed) {
+    return null;
+  }
+  const delimParts = trimmed.split(/[\t,|]/).map((p) => p.trim());
+  if (delimParts.length >= 2 && delimParts[0].includes('@')) {
+    return {
+      email: delimParts[0],
+      password: delimParts[1],
+      note: delimParts[2] ?? '',
+    };
+  }
+  const spaceMatch = trimmed.match(/^(\S+@\S+)\s+(.+)$/);
+  if (spaceMatch) {
+    return {
+      email: spaceMatch[1],
+      password: spaceMatch[2].trim(),
+      note: '',
+    };
+  }
+  if (trimmed.includes('@')) {
+    return { email: delimParts[0] || trimmed, password: '', note: '' };
+  }
+  return null;
+};
+
 const parseAccountsText = (text) => {
   const lines = String(text ?? '')
     .split(/\r?\n/)
@@ -55,20 +83,19 @@ const parseAccountsText = (text) => {
     .filter(Boolean);
   const accounts = [];
   for (const line of lines) {
-    const parts = line.split(/[\t,|]/).map((p) => p.trim());
-    const email = parts[0];
-    const password = parts[1] ?? '';
-    if (!email || !email.includes('@')) {
+    const parsed = parseAccountLine(line);
+    if (!parsed?.email?.includes('@')) {
       continue;
     }
     accounts.push({
       id: `acc_${randomBytes(4).toString('hex')}`,
-      email,
-      password,
-      note: parts[2] ?? '',
+      email: parsed.email,
+      password: parsed.password,
+      note: parsed.note,
       lastStatus: '',
       lastMessage: '',
       lastRunAt: '',
+      ...defaultAccountFields(),
     });
   }
   return accounts;
@@ -481,7 +508,10 @@ export async function handleGmailRequest({
       targets = targets.filter((a) => accountIds.includes(a.id));
     }
     if (!targets.length) {
-      sendJson(res, 400, { success: false, error: '没有可登录的账号' });
+      sendJson(res, 400, {
+        success: false,
+        error: '没有可登录的账号：请确认每行格式为「邮箱+Tab/空格+密码」且已保存',
+      });
       return true;
     }
 

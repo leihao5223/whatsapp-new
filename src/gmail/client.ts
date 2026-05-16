@@ -37,13 +37,23 @@ export async function gmailPutAccounts(
   runtimeBase: string,
   token: string | undefined,
   body: Record<string, unknown>,
-): Promise<{ success: boolean; data?: unknown; error?: string }> {
+): Promise<{ success: boolean; data?: unknown; error?: string; autoLoginTaskId?: string }> {
   const r = await fetch(joinUrl(runtimeBase, '/gmail/accounts'), {
     method: 'PUT',
     headers: authHeaders(token, { 'Content-Type': 'application/json' }),
     body: JSON.stringify(body),
   });
-  return (await r.json()) as { success: boolean; data?: unknown; error?: string };
+  let payload: { success: boolean; data?: unknown; error?: string; autoLoginTaskId?: string };
+  try {
+    payload = (await r.json()) as typeof payload;
+  } catch {
+    return { success: false, error: `保存失败（HTTP ${r.status}）` };
+  }
+  if (!r.ok && !payload.error) {
+    payload.success = false;
+    payload.error = `保存失败（HTTP ${r.status}）`;
+  }
+  return payload;
 }
 
 export async function gmailBatchStart(
@@ -92,7 +102,17 @@ export async function gmailLoginStart(
     headers: authHeaders(token, { 'Content-Type': 'application/json' }),
     body: JSON.stringify(body),
   });
-  return (await r.json()) as { success: boolean; taskId?: string; total?: number; error?: string };
+  let payload: { success: boolean; taskId?: string; total?: number; error?: string };
+  try {
+    payload = (await r.json()) as typeof payload;
+  } catch {
+    return { success: false, error: `登录接口无响应（HTTP ${r.status}，请检查 /api/gmail 反代）` };
+  }
+  if (!r.ok && !payload.error) {
+    payload.success = false;
+    payload.error = `登录失败（HTTP ${r.status}）`;
+  }
+  return payload;
 }
 
 export async function gmailFetchInbox(
