@@ -6,6 +6,19 @@ import { attachSession, closeSession } from './gmail-session-manager.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/** 服务器后台自动登录（用户无需操作，也无需理解「无头」等技术词） */
+export const createGmailBrowserContext = async (browserApi, profileDir) =>
+  browserApi.launchPersistentContext(profileDir, {
+    headless: true,
+    viewport: { width: 1366, height: 900 },
+    locale: 'zh-CN',
+    timezoneId: 'Asia/Shanghai',
+    args: ['--disable-blink-features=AutomationControlled', '--no-sandbox', '--disable-dev-shm-usage'],
+    ignoreDefaultArgs: ['--enable-automation'],
+    userAgent:
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+  });
+
 export const sanitizeEmailDir = (email) =>
   String(email ?? '')
     .trim()
@@ -106,7 +119,14 @@ const PASSWORD_PATH_LABELS = [
   '密码',
 ];
 
-const TRY_ANOTHER_WAY_LABELS = ['Try another way', '使用其他方式', '其他方式', 'More ways to verify'];
+const TRY_ANOTHER_WAY_LABELS = [
+  'Try another way',
+  '使用其他方式',
+  '试试其他方式',
+  '其他方式',
+  'More ways to verify',
+  '确认您的身份',
+];
 
 /**
  * @param {import('playwright').Page} page
@@ -127,42 +147,52 @@ async function clickFirstVisible(page, labels, role = 'button') {
  * 通行密钥页 → 其他方式 → 密码
  * @param {import('playwright').Page} page
  */
-async function navigateToPasswordChallenge(page) {
-  for (let i = 0; i < 6; i += 1) {
-    const pwdVisible = await page
-      .locator('input[type="password"]:visible, input[name="Passwd"]:visible')
-      .first()
-      .isVisible()
-      .catch(() => false);
-    if (pwdVisible) {
-      return true;
-    }
+const passwordField = (page) =>
+  page.locator(
+    'input[type="password"]:visible, input[name="Passwd"]:visible, input[autocomplete="current-password"]:visible',
+  );
 
-    await clickFirstVisible(page, PASSWORD_PATH_LABELS);
-    if (
-      !(await page
-        .locator('input[type="password"]:visible, input[name="Passwd"]:visible')
-        .first()
-        .isVisible()
-        .catch(() => false))
-    ) {
-      await clickFirstVisible(page, TRY_ANOTHER_WAY_LABELS);
-      await clickFirstVisible(page, PASSWORD_PATH_LABELS);
-    }
-
-    const pwdOption = page.locator('[data-challengetype="12"], [data-challengeid="12"]').first();
-    if ((await pwdOption.count()) > 0) {
-      await pwdOption.click({ timeout: 4000 }).catch(() => {});
-      await sleep(800);
-    }
-
-    await sleep(1000);
-  }
-  return page
-    .locator('input[type="password"]:visible, input[name="Passwd"]:visible')
+async function isPasswordFieldVisible(page) {
+  return passwordField(page)
     .first()
     .isVisible()
     .catch(() => false);
+}
+
+/** 单轮：尝试从通行密钥/验证页切到密码输入 */
+async function navigateToPasswordChallengeOnce(page) {
+  if (await isPasswordFieldVisible(page)) {
+    return true;
+  }
+
+  const textPwd = page.getByText(/输入.*密码|enter your password|use your password|改用密码|使用密码登录/i).first();
+  if ((await textPwd.count()) > 0 && (await textPwd.isVisible().catch(() => false))) {
+    await textPwd.click({ timeout: 5000 }).catch(() => {});
+    await sleep(900);
+  }
+
+  await clickFirstVisible(page, TRY_ANOTHER_WAY_LABELS);
+  await clickFirstVisible(page, PASSWORD_PATH_LABELS, 'link');
+
+  const pwdOption = page.locator('[data-challengetype="12"], [data-challengeid="12"], div[data-challengetype]').first();
+  if ((await pwdOption.count()) > 0) {
+    await pwdOption.click({ timeout: 4000 }).catch(() => {});
+    await sleep(900);
+  }
+
+  return isPasswordFieldVisible(page);
+}
+
+async function waitForPasswordField(page, timeoutMs = 90_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await isPasswordFieldVisible(page)) {
+      return true;
+    }
+    await navigateToPasswordChallengeOnce(page);
+    await sleep(1200);
+  }
+  return false;
 }
 
 /**
@@ -199,13 +229,13 @@ async function describeLoginBlocker(page) {
   }
 
   if (/recaptcha|人机验证|证明您不是机器人/i.test(snippet)) {
-    return 'Google 要求人机验证。请关闭「无头模式」，在服务器上人工完成一次登录后再试。';
+    return 'Google 要求人机验证，当前无法自动完成。请检查账号是否可正常网页登录，或更换网络后重试。';
   }
   if (/\/challenge\//.test(url) && !/pwd|password/i.test(url)) {
-    return '需要二次验证（短信/App/安全密钥）。请关闭无头模式，用浏览器配置目录人工登录一次。';
+    return '该账号需要短信/App/安全密钥等二次验证，自动登录无法代替。请先在浏览器正常登录一次该邮箱。';
   }
   if (/signin\/rejected|browser.*not.*secure/i.test(snippet + url)) {
-    return 'Google 认为浏览器环境不安全。请关闭无头模式或更换网络/IP 后重试。';
+    return 'Google 拦截了本次登录（环境不安全）。请确认密码正确，或更换网络/IP 后重试。';
   }
   if (/couldn't find your google account|找不到.*Google 账号/i.test(snippet)) {
     return '邮箱地址不存在或拼写错误。';
@@ -214,7 +244,7 @@ async function describeLoginBlocker(page) {
     return '登录尝试过多，账号被临时限制，请稍后再试。';
   }
   if (/passkey|通行密钥|安全密钥/i.test(snippet)) {
-    return '停留在通行密钥登录页，未能切换到密码输入（可关闭无头模式人工登录一次）。';
+    return 'Google 要求使用通行密钥，未能切换到密码登录。请确认该账号支持密码登录。';
   }
   return `未出现密码输入框。当前页面：${url.replace(/\?.*/, '')}`;
 }
@@ -239,12 +269,12 @@ async function submitIdentifier(page, email) {
  * @param {string} password
  */
 async function submitPassword(page, password) {
-  const ready = await navigateToPasswordChallenge(page);
+  const ready = await waitForPasswordField(page, 90_000);
   if (!ready) {
     throw new Error(await describeLoginBlocker(page));
   }
 
-  const passwordInput = page.locator('input[type="password"]:visible, input[name="Passwd"]:visible').first();
+  const passwordInput = passwordField(page).first();
   await passwordInput.waitFor({ state: 'visible', timeout: 15_000 });
   await passwordInput.click();
   await passwordInput.fill('');
@@ -291,7 +321,7 @@ export async function performGmailLogin(page, email, password, opts = {}) {
   if (emailVisible) {
     await submitIdentifier(page, email);
   } else {
-    await navigateToPasswordChallenge(page);
+    await waitForPasswordField(page, 30_000);
   }
 
   await pickAccountIfChooser(page, email);
@@ -300,8 +330,7 @@ export async function performGmailLogin(page, email, password, opts = {}) {
   try {
     await page.waitForURL(/mail\.google\.com\/mail|myaccount\.google\.com/, { timeout: 90_000 });
   } catch {
-    await navigateToPasswordChallenge(page);
-    if (await page.locator('input[type="password"]:visible').count()) {
+    if (!(await isGmailInboxReady(page))) {
       throw new Error(await describeLoginBlocker(page));
     }
   }
@@ -490,15 +519,11 @@ export async function loginGmailAndKeepSession({
   await mkdir(profileDir, { recursive: true });
 
   const { api: browserApi } = resolvePlaywrightLauncher();
-  const context = await browserApi.launchPersistentContext(profileDir, {
-    headless,
-    args: headless ? [] : ['--start-maximized'],
-    viewport: { width: 1280, height: 900 },
-  });
+  const context = await createGmailBrowserContext(browserApi, profileDir);
   const page = context.pages()[0] ?? (await context.newPage());
 
   try {
-    onLog(`正在登录 ${email}…`);
+    onLog(`正在自动登录 ${email}…`);
     const loginResult = await performGmailLogin(page, email, password, { skipPrompts: true });
     onLog(loginResult.alreadyLoggedIn ? '会话已存在，已确认收件箱' : '账密登录成功，已跳过引导页');
 
@@ -552,11 +577,7 @@ export async function modifyGmailProfile({
   await mkdir(profileDir, { recursive: true });
 
   const { api: browserApi } = resolvePlaywrightLauncher();
-  const context = await browserApi.launchPersistentContext(profileDir, {
-    headless,
-    args: headless ? [] : ['--start-maximized'],
-    viewport: { width: 1280, height: 900 },
-  });
+  const context = await createGmailBrowserContext(browserApi, profileDir);
 
   const page = context.pages()[0] ?? (await context.newPage());
 

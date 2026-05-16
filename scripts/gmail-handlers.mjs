@@ -37,7 +37,6 @@ const defaultDoc = (userId) => ({
     defaultDisplayName: '',
     delayBetweenSec: 5,
     updateAvatar: true,
-    headless: true,
     autoLoginOnSave: false,
   },
 });
@@ -401,9 +400,6 @@ export async function handleGmailRequest({
       if (typeof body.settings.updateAvatar === 'boolean') {
         doc.settings.updateAvatar = body.settings.updateAvatar;
       }
-      if (typeof body.settings.headless === 'boolean') {
-        doc.settings.headless = body.settings.headless;
-      }
       if (typeof body.settings.autoLoginOnSave === 'boolean') {
         doc.settings.autoLoginOnSave = body.settings.autoLoginOnSave;
       }
@@ -443,7 +439,7 @@ export async function handleGmailRequest({
         userId,
         doc,
         accountIds: null,
-        headless: doc.settings.headless !== false,
+        headless: true,
         delaySec: doc.settings.delayBetweenSec ?? 5,
       });
     }
@@ -501,7 +497,7 @@ export async function handleGmailRequest({
     const delaySec = Number.isFinite(Number(body.delayBetweenSec))
       ? Math.min(120, Math.max(0, Number(body.delayBetweenSec)))
       : doc.settings.delayBetweenSec ?? 5;
-    const headless = typeof body.headless === 'boolean' ? body.headless : doc.settings.headless !== false;
+    const headless = true;
 
     let targets = doc.accounts.filter((a) => a.email && a.password);
     if (accountIds?.length) {
@@ -554,7 +550,7 @@ export async function handleGmailRequest({
     const delaySec = Number.isFinite(Number(body.delayBetweenSec))
       ? Math.min(120, Math.max(0, Number(body.delayBetweenSec)))
       : doc.settings.delayBetweenSec ?? 5;
-    const headless = typeof body.headless === 'boolean' ? body.headless : doc.settings.headless !== false;
+    const headless = true;
     const updateAvatar =
       typeof body.updateAvatar === 'boolean' ? body.updateAvatar : doc.settings.updateAvatar !== false;
     const avatarPath = updateAvatar && existsSync(userAvatarPath(root, userId)) ? userAvatarPath(root, userId) : '';

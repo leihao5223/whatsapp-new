@@ -18,8 +18,9 @@ export type GmailSettings = {
   defaultDisplayName: string;
   delayBetweenSec: number;
   updateAvatar: boolean;
-  headless: boolean;
   autoLoginOnSave?: boolean;
+  /** @deprecated 已固定后台自动登录，界面不再展示 */
+  headless?: boolean;
 };
 
 export type GmailInboxMessage = {

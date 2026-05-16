@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { resolvePlaywrightLauncher } from './engine/playwright-browser.mjs';
+import { createGmailBrowserContext } from './gmail-profile-runner.mjs';
 
 /** @type {Map<string, { context: import('playwright').BrowserContext; page: import('playwright').Page; email: string; userId: string; accountId: string; lastUsed: number }>} */
 const liveSessions = new Map();
@@ -61,10 +62,7 @@ export async function attachSession({ userId, accountId, email, profileDir, head
   }
 
   const { api: browserApi } = resolvePlaywrightLauncher();
-  const ctx = await browserApi.launchPersistentContext(profileDir, {
-    headless,
-    viewport: { width: 1280, height: 900 },
-  });
+  const ctx = await createGmailBrowserContext(browserApi, profileDir);
   const pg = ctx.pages()[0] ?? (await ctx.newPage());
   const session = { context: ctx, page: pg, email, userId, accountId, lastUsed: Date.now() };
   liveSessions.set(key, session);

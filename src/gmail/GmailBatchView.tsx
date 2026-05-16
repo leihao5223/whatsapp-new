@@ -33,7 +33,6 @@ const defaultSettings: GmailSettings = {
   defaultDisplayName: '',
   delayBetweenSec: 5,
   updateAvatar: true,
-  headless: true,
   autoLoginOnSave: false,
 };
 
@@ -176,7 +175,6 @@ export default function GmailBatchView({ runtimeBaseUrl, authToken }: Props) {
       const res = await gmailLoginStart(runtimeBaseUrl, authToken, {
         accountIds,
         delayBetweenSec: settings.delayBetweenSec,
-        headless: settings.headless,
       });
       if (!res.success || !res.taskId) {
         setNotice(res.error ?? '启动登录失败（请确认 Runner 已启动且 Nginx 已转发 /gmail）');
@@ -278,7 +276,6 @@ export default function GmailBatchView({ runtimeBaseUrl, authToken }: Props) {
         newDisplayName: settings.defaultDisplayName,
         delayBetweenSec: settings.delayBetweenSec,
         updateAvatar: settings.updateAvatar,
-        headless: settings.headless,
       });
       if (!res.success || !res.taskId) {
         setNotice(res.error ?? '启动批量任务失败');
@@ -511,20 +508,11 @@ export default function GmailBatchView({ runtimeBaseUrl, authToken }: Props) {
             </header>
             <div className="gmail-panel__body">
               <ul className="gmail-hint gmail-hint-list">
-                <li>使用 Playwright 真实打开 Gmail，输入账密完成登录。</li>
-                <li>自动跳过「智能功能」「隐私提示」等引导页。</li>
-                <li>登录成功后会验证收件箱是否就绪，状态显示为「已登录」。</li>
-                <li>点击已登录邮箱行，右侧悬浮窗展示当前收件箱列表。</li>
-                <li>开启 2FA 的账号可能需先在服务器 profile 目录人工登录一次。</li>
+                <li>填写邮箱和密码后，点「登录」即可，系统会在后台自动打开 Gmail 并完成登录。</li>
+                <li>您无需安装浏览器，也无需任何额外设置。</li>
+                <li>登录成功显示「已登录」，点击邮箱行可查看收件箱。</li>
+                <li>若账号开启了短信/App 二次验证，需先在网页正常登录一次该邮箱。</li>
               </ul>
-              <label className="landing-check">
-                <input
-                  type="checkbox"
-                  checked={settings.headless}
-                  onChange={(e) => setSettings((s) => ({ ...s, headless: e.target.checked }))}
-                />
-                <span>无头模式（服务器建议开启）</span>
-              </label>
             </div>
           </section>
         )}
