@@ -96,6 +96,163 @@ export async function navigateToInbox(page) {
   await sleep(1500);
 }
 
+const PASSWORD_PATH_LABELS = [
+  'Enter your password',
+  'Use your password',
+  '输入您的密码',
+  '输入密码',
+  '改用密码',
+  'Password',
+  '密码',
+];
+
+const TRY_ANOTHER_WAY_LABELS = ['Try another way', '使用其他方式', '其他方式', 'More ways to verify'];
+
+/**
+ * @param {import('playwright').Page} page
+ */
+async function clickFirstVisible(page, labels, role = 'button') {
+  for (const label of labels) {
+    const loc = page.locator(`${role}:has-text("${label}"), div[role="button"]:has-text("${label}"), div[role="link"]:has-text("${label}")`).first();
+    if ((await loc.count()) > 0 && (await loc.isVisible().catch(() => false))) {
+      await loc.click({ timeout: 5000 }).catch(() => {});
+      await sleep(800);
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * 通行密钥页 → 其他方式 → 密码
+ * @param {import('playwright').Page} page
+ */
+async function navigateToPasswordChallenge(page) {
+  for (let i = 0; i < 6; i += 1) {
+    const pwdVisible = await page
+      .locator('input[type="password"]:visible, input[name="Passwd"]:visible')
+      .first()
+      .isVisible()
+      .catch(() => false);
+    if (pwdVisible) {
+      return true;
+    }
+
+    await clickFirstVisible(page, PASSWORD_PATH_LABELS);
+    if (
+      !(await page
+        .locator('input[type="password"]:visible, input[name="Passwd"]:visible')
+        .first()
+        .isVisible()
+        .catch(() => false))
+    ) {
+      await clickFirstVisible(page, TRY_ANOTHER_WAY_LABELS);
+      await clickFirstVisible(page, PASSWORD_PATH_LABELS);
+    }
+
+    const pwdOption = page.locator('[data-challengetype="12"], [data-challengeid="12"]').first();
+    if ((await pwdOption.count()) > 0) {
+      await pwdOption.click({ timeout: 4000 }).catch(() => {});
+      await sleep(800);
+    }
+
+    await sleep(1000);
+  }
+  return page
+    .locator('input[type="password"]:visible, input[name="Passwd"]:visible')
+    .first()
+    .isVisible()
+    .catch(() => false);
+}
+
+/**
+ * @param {import('playwright').Page} page
+ * @param {string} email
+ */
+async function pickAccountIfChooser(page, email) {
+  const normalized = email.toLowerCase();
+  const tile = page.locator(`div[data-identifier="${normalized}"], div[data-email="${normalized}"], [data-email="${email}"]`).first();
+  if ((await tile.count()) > 0 && (await tile.isVisible().catch(() => false))) {
+    await tile.click();
+    await sleep(2000);
+    return true;
+  }
+  const link = page.locator(`a:has-text("${email}"), div:has-text("${email}")`).first();
+  if ((await link.count()) > 0 && (await link.isVisible().catch(() => false))) {
+    await link.click();
+    await sleep(2000);
+    return true;
+  }
+  return false;
+}
+
+/**
+ * @param {import('playwright').Page} page
+ */
+async function describeLoginBlocker(page) {
+  const url = page.url();
+  let snippet = '';
+  try {
+    snippet = (await page.locator('body').innerText({ timeout: 3000 })).slice(0, 400);
+  } catch {
+    snippet = '';
+  }
+
+  if (/recaptcha|人机验证|证明您不是机器人/i.test(snippet)) {
+    return 'Google 要求人机验证。请关闭「无头模式」，在服务器上人工完成一次登录后再试。';
+  }
+  if (/\/challenge\//.test(url) && !/pwd|password/i.test(url)) {
+    return '需要二次验证（短信/App/安全密钥）。请关闭无头模式，用浏览器配置目录人工登录一次。';
+  }
+  if (/signin\/rejected|browser.*not.*secure/i.test(snippet + url)) {
+    return 'Google 认为浏览器环境不安全。请关闭无头模式或更换网络/IP 后重试。';
+  }
+  if (/couldn't find your google account|找不到.*Google 账号/i.test(snippet)) {
+    return '邮箱地址不存在或拼写错误。';
+  }
+  if (/too many|尝试次数过多|locked/i.test(snippet)) {
+    return '登录尝试过多，账号被临时限制，请稍后再试。';
+  }
+  if (/passkey|通行密钥|安全密钥/i.test(snippet)) {
+    return '停留在通行密钥登录页，未能切换到密码输入（可关闭无头模式人工登录一次）。';
+  }
+  return `未出现密码输入框。当前页面：${url.replace(/\?.*/, '')}`;
+}
+
+/**
+ * @param {import('playwright').Page} page
+ * @param {string} email
+ */
+async function submitIdentifier(page, email) {
+  const emailInput = page.locator('input[type="email"]:visible, input[name="identifier"]:visible').first();
+  await emailInput.waitFor({ state: 'visible', timeout: 25_000 });
+  await emailInput.click();
+  await emailInput.fill('');
+  await emailInput.fill(email);
+  const nextBtn = page.locator('#identifierNext button, #identifierNext, button:has-text("下一步"), button:has-text("Next")').first();
+  await nextBtn.click({ timeout: 10_000 });
+  await sleep(2500);
+}
+
+/**
+ * @param {import('playwright').Page} page
+ * @param {string} password
+ */
+async function submitPassword(page, password) {
+  const ready = await navigateToPasswordChallenge(page);
+  if (!ready) {
+    throw new Error(await describeLoginBlocker(page));
+  }
+
+  const passwordInput = page.locator('input[type="password"]:visible, input[name="Passwd"]:visible').first();
+  await passwordInput.waitFor({ state: 'visible', timeout: 15_000 });
+  await passwordInput.click();
+  await passwordInput.fill('');
+  await passwordInput.fill(password);
+  const passNext = page.locator('#passwordNext button, #passwordNext, button:has-text("下一步"), button:has-text("Next")').first();
+  await passNext.click({ timeout: 10_000 });
+}
+
 /**
  * @param {import('playwright').Page} page
  * @param {string} email
@@ -116,29 +273,38 @@ export async function performGmailLogin(page, email, password, opts = {}) {
     return { alreadyLoggedIn: true };
   }
 
-  await page.goto('https://accounts.google.com/ServiceLogin?service=mail&continue=https://mail.google.com/mail/', {
-    waitUntil: 'domcontentloaded',
-    timeout: 60_000,
-  });
-  await sleep(1500);
+  const continueUrl = encodeURIComponent('https://mail.google.com/mail/u/0/');
+  await page.goto(
+    `https://accounts.google.com/v3/signin/identifier?continue=${continueUrl}&service=mail&flowName=GlifWebSignIn&flowEntry=ServiceLogin&Email=${encodeURIComponent(email)}`,
+    { waitUntil: 'domcontentloaded', timeout: 60_000 },
+  );
+  await sleep(2000);
 
-  const emailInput = page.locator('input[type="email"], input[name="identifier"]').first();
-  if ((await emailInput.count()) > 0 && (await emailInput.isVisible().catch(() => false))) {
-    await emailInput.fill(email);
-    const nextBtn = page.locator('#identifierNext, button:has-text("下一步"), button:has-text("Next")').first();
-    await nextBtn.click();
-    await sleep(2000);
+  await pickAccountIfChooser(page, email);
+
+  const emailVisible = await page
+    .locator('input[type="email"]:visible, input[name="identifier"]:visible')
+    .first()
+    .isVisible()
+    .catch(() => false);
+
+  if (emailVisible) {
+    await submitIdentifier(page, email);
+  } else {
+    await navigateToPasswordChallenge(page);
   }
 
-  const passwordInput = page.locator('input[type="password"], input[name="Passwd"]').first();
-  await passwordInput.waitFor({ state: 'visible', timeout: 35_000 });
-  await passwordInput.fill(password);
-  const passNext = page.locator('#passwordNext, button:has-text("下一步"), button:has-text("Next")').first();
-  await passNext.click();
+  await pickAccountIfChooser(page, email);
+  await submitPassword(page, password);
 
-  await page.waitForURL(/mail\.google\.com\/mail|myaccount\.google\.com|google\.com\/mail/, {
-    timeout: 120_000,
-  });
+  try {
+    await page.waitForURL(/mail\.google\.com\/mail|myaccount\.google\.com/, { timeout: 90_000 });
+  } catch {
+    await navigateToPasswordChallenge(page);
+    if (await page.locator('input[type="password"]:visible').count()) {
+      throw new Error(await describeLoginBlocker(page));
+    }
+  }
   await sleep(2000);
 
   if (opts.skipPrompts !== false) {
@@ -148,7 +314,7 @@ export async function performGmailLogin(page, email, password, opts = {}) {
   await navigateToInbox(page);
 
   if (!(await isGmailInboxReady(page))) {
-    throw new Error('登录未完成：未检测到 Gmail 收件箱（可能需要 2FA 或人工验证）');
+    throw new Error(`登录未完成：${await describeLoginBlocker(page)}`);
   }
 
   return { alreadyLoggedIn: false };
