@@ -378,6 +378,17 @@ button:disabled {
   padding: 22px 24px 28px;
 }
 
+/* 落地页：占满内容区高度，上图下册 70/30，避免图册叠在中间 */
+.content-shell:has(.landing-page-root) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: calc(var(--layout-min-height, 100dvh) - 44px);
+  max-height: calc(var(--layout-min-height, 100dvh) - 44px);
+  padding: 14px 18px 16px;
+  overflow: hidden;
+}
+
 .content-shell--white {
   background: #ffffff;
 }
@@ -2288,13 +2299,22 @@ textarea::placeholder {
 }
 
 .landing-page-root {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-height: min(1200px, calc(100dvh - 120px));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) minmax(200px, 30vh);
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.landing-workspace {
+  min-height: 0;
+  overflow: hidden;
 }
 
 .landing-page-hero {
+  flex-shrink: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
@@ -2418,11 +2438,11 @@ textarea::placeholder {
 
 .landing-top-split {
   display: grid;
-  grid-template-columns: minmax(280px, 1fr) minmax(340px, 1.35fr) minmax(300px, 1.05fr);
-  gap: 16px;
-  flex: 7 1 0%;
-  min-height: min(68dvh, 860px);
-  max-height: min(76dvh, 940px);
+  grid-template-columns: minmax(260px, 1fr) minmax(320px, 1.35fr) minmax(280px, 1.05fr);
+  gap: 14px;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
   align-items: stretch;
 }
 
@@ -2532,9 +2552,8 @@ textarea::placeholder {
 }
 
 .landing-gallery {
-  flex: 3 1 0%;
-  min-height: min(32dvh, 460px);
-  max-height: min(40dvh, 580px);
+  min-height: 0;
+  max-height: 30vh;
   min-width: 0;
   overflow: hidden;
   display: flex;
@@ -2547,6 +2566,14 @@ textarea::placeholder {
   backdrop-filter: blur(14px);
   box-shadow: 0 14px 36px rgba(2, 18, 22, 0.32);
   padding: 4px 0 0;
+  position: relative;
+  z-index: 0;
+  flex-shrink: 0;
+}
+
+.landing-gallery--dock {
+  grid-row: 3;
+  align-self: end;
 }
 
 .landing-gallery-header.panel__header,
@@ -2625,13 +2652,15 @@ textarea::placeholder {
 }
 
 .landing-gallery-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-x: auto;
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
   scroll-snap-type: x mandatory;
-  margin: 0 -6px;
-  padding: 6px 6px 14px;
+  margin: 0 12px;
+  padding: 6px 6px 12px;
   min-width: 0;
 }
 
@@ -2729,10 +2758,33 @@ textarea::placeholder {
 }
 
 @media (max-width: 1280px) {
+  .content-shell:has(.landing-page-root) {
+    height: auto;
+    max-height: none;
+    overflow: auto;
+  }
+
+  .landing-page-root {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    overflow: visible;
+  }
+
+  .landing-workspace {
+    overflow: visible;
+  }
+
   .landing-top-split {
     grid-template-columns: 1fr;
+    height: auto;
     min-height: 0;
+  }
+
+  .landing-gallery,
+  .landing-gallery--dock {
     max-height: none;
+    min-height: 320px;
   }
 
   .landing-page-hero {

@@ -370,7 +370,8 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
         </div>
       </header>
 
-      <div className="landing-top-split">
+      <div className="landing-workspace">
+        <div className="landing-top-split">
         <section className="landing-panel landing-col landing-col--form">
           <div className="landing-panel__head">
             <span className="landing-panel__badge">01</span>
@@ -621,9 +622,10 @@ export default function LandingPageView({ runtimeBaseUrl, authToken }: Props) {
             </button>
           </div>
         </section>
+        </div>
       </div>
 
-      <section className="landing-panel landing-gallery">
+      <section className="landing-panel landing-gallery landing-gallery--dock">
         <div className="landing-panel__head landing-gallery-header">
           <span className="landing-panel__badge">04</span>
           <div>
