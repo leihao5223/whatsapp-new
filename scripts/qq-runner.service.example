@@ -1,0 +1,25 @@
+# 复制到 Linux 服务器后按需改路径与用户，再：
+#   sudo cp scripts/qq-runner.service.example /etc/systemd/system/qq-runner.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now qq-runner
+#   curl -sS "http://127.0.0.1:8787/health" | head -c 200
+#
+# Nginx 的 proxy_pass 端口须与本文件 Environment=QQ_RUNNER_PORT 一致（默认 8787）。
+
+[Unit]
+Description=QE QQ Runner (local-qq-runner.mjs)
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/whatsapp-new
+ExecStart=/usr/bin/node scripts/local-qq-runner.mjs
+Restart=always
+RestartSec=3
+Environment=NODE_ENV=production
+Environment=QQ_RUNNER_PORT=8787
+Environment=QQ_RUNNER_LISTEN_HOST=0.0.0.0
+
+[Install]
+WantedBy=multi-user.target
