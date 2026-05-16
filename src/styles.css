@@ -17,16 +17,28 @@
 
 html {
   zoom: 0.85;
+  /* zoom 缩小后可视区域底部会露出 html 背景，侧栏需补偿高度 */
+  --layout-min-height: calc(100dvh / 0.85);
+  min-height: var(--layout-min-height);
+  background: #033f3c;
 }
 
 body {
   margin: 0;
   min-width: 1200px;
-  min-height: 100vh;
-  background:
-    radial-gradient(circle at 12% 0%, rgba(93, 255, 176, 0.12), transparent 32%),
-    radial-gradient(circle at 85% 5%, rgba(34, 211, 238, 0.1), transparent 28%),
-    linear-gradient(145deg, #042729 0%, #062f31 50%, #032324 100%);
+  min-height: var(--layout-min-height, 100dvh);
+  /* 左侧与侧栏同色，避免 zoom 后底部露出白条；右侧为内容区浅色 */
+  background: linear-gradient(
+    90deg,
+    #042c31 0,
+    #064f47 260px,
+    #f8fafc 260px,
+    #ffffff 100%
+  );
+}
+
+#root {
+  min-height: var(--layout-min-height, 100dvh);
 }
 
 .login-shell {
@@ -99,7 +111,7 @@ button:disabled {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
   width: 100%;
-  min-height: 100vh;
+  min-height: var(--layout-min-height, 100dvh);
   align-items: stretch;
   font-size: calc(1rem * var(--ui-scale));
 }
@@ -114,9 +126,10 @@ button:disabled {
   display: flex;
   flex-direction: column;
   align-self: stretch;
-  min-height: 100vh;
-  min-height: 100dvh;
+  min-height: 100%;
+  height: auto;
   overflow-x: hidden;
+  overflow-y: auto;
   color: #d7fff7;
   background:
     linear-gradient(180deg, rgba(17, 185, 166, 0.12), transparent 42%),
@@ -133,7 +146,8 @@ button:disabled {
     linear-gradient(rgba(125, 255, 231, 0.055) 1px, transparent 1px),
     linear-gradient(90deg, rgba(125, 255, 231, 0.055) 1px, transparent 1px);
   background-size: 34px 34px;
-  mask-image: linear-gradient(to bottom, #000 0%, transparent 88%);
+  /* 网格铺满整列，避免底部看起来像「没拉通」 */
+  mask-image: none;
 }
 
 .brand-card,
@@ -311,7 +325,7 @@ button:disabled {
   flex-shrink: 0;
   gap: 10px;
   align-items: center;
-  margin: auto 14px 16px;
+  margin: auto 14px 12px 14px;
   padding: 14px;
   border: 1px solid rgba(190, 255, 244, 0.13);
   border-radius: 18px;
@@ -331,7 +345,8 @@ button:disabled {
   position: relative;
   z-index: 1;
   flex-shrink: 0;
-  margin: 0 14px 18px;
+  margin: 0 14px max(18px, env(safe-area-inset-bottom, 0px));
+  padding-bottom: 2px;
 }
 
 .sidebar-logout {
@@ -378,10 +393,6 @@ button:disabled {
   --postcard-field-text: #000000;
   --postcard-field-placeholder: rgba(0, 0, 0, 0.42);
   --postcard-field-focus-ring: 0 0 0 2px rgba(0, 0, 0, 0.12);
-}
-
-body {
-  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
 }
 
 .panel h2 {
@@ -1515,14 +1526,17 @@ th {
 }
 
 .task-center-shell .section-kicker {
-  color: #0f766e;
+  color: rgba(163, 255, 234, 0.82) !important;
 }
 
 .task-center-shell .panel h2,
-.task-center-shell .panel strong,
+.task-center-shell .panel strong {
+  color: #eafffb !important;
+}
+
 .task-center-shell .panel td,
 .task-center-shell .panel th {
-  color: #122033;
+  color: #eafffb !important;
 }
 
 .task-center-shell .connector-note {
@@ -1559,13 +1573,238 @@ th {
 }
 
 .task-modal {
-  border: 1px solid rgba(142, 255, 236, 0.24);
-  background: linear-gradient(150deg, #06383b 0%, #064b4b 48%, #083537 100%);
-  box-shadow: 0 24px 54px rgba(3, 23, 25, 0.45);
+  width: min(720px, 100%);
+  max-height: min(90vh, 900px);
+  overflow: auto;
+  border: 1px solid rgba(163, 255, 234, 0.32);
+  border-radius: 22px;
+  background: linear-gradient(155deg, rgba(8, 58, 60, 0.72), rgba(4, 38, 40, 0.58));
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 28px 60px rgba(2, 18, 22, 0.55);
 }
 
-.task-modal .batch-input {
-  min-height: 100px;
+.task-modal--glass {
+  padding: 0;
+}
+
+.task-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px;
+  border-bottom: 1px solid rgba(163, 255, 234, 0.2);
+  background: rgba(2, 32, 34, 0.45);
+}
+
+.task-modal__header h2,
+.task-modal__header .section-kicker,
+.task-modal__body,
+.task-glass-label,
+.task-glass-counter,
+.task-modal__notice {
+  color: #ecfdf9 !important;
+}
+
+.task-modal__header .section-kicker {
+  color: rgba(163, 255, 234, 0.85) !important;
+}
+
+.task-modal__body {
+  display: grid;
+  gap: 14px;
+  padding: 16px 20px 20px;
+}
+
+.task-glass-section {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05));
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  border: 1px solid rgba(163, 255, 234, 0.28);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.task-glass-section__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.task-glass-actions {
+  margin: 0;
+}
+
+.task-glass-label {
+  font-size: 0.86rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.task-glass-control,
+.task-modal--glass select,
+.task-modal--glass input,
+.task-modal--glass textarea {
+  width: 100%;
+  border-radius: 12px !important;
+  border: 1px solid rgba(163, 255, 234, 0.35) !important;
+  background: rgba(2, 32, 34, 0.55) !important;
+  color: #ecfdf9 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+.task-glass-control::placeholder,
+.task-modal--glass textarea::placeholder,
+.task-modal--glass input::placeholder {
+  color: rgba(200, 245, 236, 0.55) !important;
+}
+
+.task-glass-control:focus,
+.task-modal--glass select:focus,
+.task-modal--glass input:focus,
+.task-modal--glass textarea:focus {
+  outline: none !important;
+  border-color: rgba(125, 255, 231, 0.65) !important;
+  box-shadow: 0 0 0 3px rgba(93, 255, 176, 0.18) !important;
+}
+
+.task-modal--glass select option {
+  color: #042729 !important;
+  background: #eafffb !important;
+}
+
+.task-glass-textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.task-glass-stack {
+  display: grid;
+  gap: 8px;
+}
+
+.task-glass-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.task-glass-control--compact {
+  max-width: 220px;
+}
+
+.task-glass-counter {
+  font-size: 0.82rem;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(163, 255, 234, 0.28);
+  background: rgba(2, 32, 34, 0.5);
+}
+
+.task-port-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 8px;
+}
+
+.task-port-chip {
+  border: 1px solid rgba(163, 255, 234, 0.32);
+  border-radius: 12px;
+  padding: 10px 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #d7fff7 !important;
+  background: rgba(2, 32, 34, 0.45);
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.task-port-chip:hover {
+  border-color: rgba(125, 255, 231, 0.55);
+  transform: translateY(-1px);
+}
+
+.task-port-chip--active {
+  color: #042729 !important;
+  border-color: rgba(125, 255, 231, 0.75);
+  background: linear-gradient(135deg, rgba(93, 255, 176, 0.92), rgba(127, 255, 231, 0.88));
+}
+
+.task-modal__footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.task-modal__footer .run-button {
+  color: #042729 !important;
+}
+
+.task-modal__notice {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(163, 255, 234, 0.24);
+  background: rgba(2, 32, 34, 0.55);
+  font-size: 0.86rem;
+}
+
+.task-work-log-panel .panel__header {
+  align-items: center;
+}
+
+.task-work-log-hint {
+  margin-top: 0;
+}
+
+.task-work-log-scroll {
+  max-height: min(42vh, 420px);
+  overflow: auto;
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(163, 255, 234, 0.22);
+  background: rgba(2, 32, 34, 0.52);
+  backdrop-filter: blur(10px);
+}
+
+.task-work-log-line {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(163, 255, 234, 0.16);
+  background: rgba(3, 42, 44, 0.62);
+  color: #e8fffb !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  word-break: break-all;
+}
+
+.task-work-log-line--hit {
+  border-color: rgba(93, 255, 176, 0.45);
+  background: rgba(8, 68, 58, 0.55);
+  color: #d7ffe8 !important;
+}
+
+.task-work-log-empty {
+  margin: 0;
+  text-align: center;
+  color: rgba(200, 245, 236, 0.62) !important;
+  font-size: 0.88rem;
+  padding: 20px 8px;
 }
 
 .task-board {

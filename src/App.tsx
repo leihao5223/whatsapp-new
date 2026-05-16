@@ -70,6 +70,16 @@ type SearchStats = {
 
 type BatchRow = BatchResultRow;
 
+type WorkLogEntry = {
+  id: string;
+  batchId: string;
+  at: string;
+  portLabel: string;
+  phone: string;
+  hit: boolean;
+  qq: string;
+};
+
 type BatchStatus = {
   id: string;
   status: 'queued' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
@@ -624,6 +634,7 @@ function App() {
   const [batchId, setBatchId] = useState('');
   const [batchStatus, setBatchStatus] = useState<BatchStatus | null>(null);
   const [batchRows, setBatchRows] = useState<BatchRow[]>([]);
+  const [workLogEntries, setWorkLogEntries] = useState<WorkLogEntry[]>([]);
   const [dataDocs, setDataDocs] = useState<DataDocument[]>([]);
   const [dedupeLibrary, setDedupeLibrary] = useState<string[]>([]);
   const [runnerInput, setRunnerInput] = useState('');
@@ -666,6 +677,8 @@ function App() {
   const batchPortOrderRef = useRef<string[]>([]);
   const distributionPlanRef = useRef<Record<string, number>>({});
   const phonePortMapRef = useRef<Record<string, string>>({});
+  const lastBatchRecordCountRef = useRef(0);
+  const activeBatchIdRef = useRef('');
 
   const stats: SearchStats = useMemo(
     () => ({
@@ -1148,6 +1161,30 @@ function App() {
       });
       setPortOutputs((current) => ({ ...current, ...latestByPort }));
     }
+    const records = data.records ?? [];
+    if (records.length > lastBatchRecordCountRef.current) {
+      const newRecords = records.slice(lastBatchRecordCountRef.current);
+      const portOrder = batchPortOrderRef.current;
+      const phoneMap = phonePortMapRef.current;
+      const batchKey = data.id || activeBatchIdRef.current || id;
+      const appended: WorkLogEntry[] = newRecords.map((record, offset) => {
+        const globalIndex = lastBatchRecordCountRef.current + offset;
+        const portId = phoneMap[record.phone] ?? portOrder[globalIndex % Math.max(portOrder.length, 1)] ?? '';
+        const portLabel = (ports.find((port) => port.id === portId)?.name ?? portId) || '未知端口';
+        const hit = Boolean(record.opened && record.qq);
+        return {
+          id: `${batchKey}-${record.phone}-${globalIndex}`,
+          batchId: batchKey,
+          at: record.query_time ?? new Date().toISOString(),
+          portLabel,
+          phone: record.phone,
+          hit,
+          qq: hit ? record.qq : '-',
+        };
+      });
+      lastBatchRecordCountRef.current = records.length;
+      setWorkLogEntries((current) => [...appended.reverse(), ...current].slice(0, 800));
+    }
     if (data.status === 'completed' || data.status === 'failed' || data.status === 'cancelled') {
       stopBatchPolling();
       setBatchRunning(false);
@@ -1303,6 +1340,8 @@ function App() {
       setBatchRunning(true);
       setBatchRows([]);
       setBatchStatus(null);
+      setWorkLogEntries([]);
+      lastBatchRecordCountRef.current = 0;
       const effectiveMode = options?.overrideMode ?? batchMode;
       const effectiveHttpConcurrency = options?.overrideHttpConcurrencyPerWorker ?? httpConcurrencyPerWorker;
       const response = await fetch(runtimeBatchUrl(runtimeBaseUrl, '/pipeline/import-and-start'), {
@@ -1348,6 +1387,7 @@ function App() {
         return;
       }
       setBatchId(payload.batch.batchId);
+      activeBatchIdRef.current = payload.batch.batchId;
       if (payload.batch.distribution) {
         setDistributionPlan(payload.batch.distribution);
       }
@@ -1795,6 +1835,8 @@ function App() {
         return (
           <TaskCenterPage
             authToken={authToken}
+            activeBatchId={batchId}
+            batchRunning={batchRunning}
             dataDocs={dataDocs}
             ipPool={ipPool}
             ports={ports}
@@ -1805,6 +1847,7 @@ function App() {
             stopBatchRun={stopBatchRun}
             takeNumbersFromLibrary={takeNumbersFromLibrary}
             updatePort={updatePort}
+            workLogEntries={workLogEntries}
           />
         );
       case 'security':
@@ -2577,8 +2620,14 @@ function IpPoolPage({
   );
 }
 
+function formatWorkLogLine(entry: WorkLogEntry) {
+  return `端口号：${entry.portLabel}  识别号码：${entry.phone}  结果：${entry.hit ? '命中' : '未命中'}  QQ号：${entry.qq}`;
+}
+
 function TaskCenterPage({
   authToken,
+  activeBatchId,
+  batchRunning,
   dataDocs,
   ipPool,
   ports,
@@ -2589,12 +2638,16 @@ function TaskCenterPage({
   stopBatchRun,
   takeNumbersFromLibrary,
   updatePort,
+  workLogEntries,
 }: {
   authToken?: string;
+  activeBatchId: string;
+  batchRunning: boolean;
   dataDocs: DataDocument[];
   ipPool: IpEntry[];
   ports: EmulatorPort[];
   runtimeBaseUrl: string;
+  workLogEntries: WorkLogEntry[];
   startBatchRun: (
     incomingPhones: string[],
     options?: {
@@ -2627,6 +2680,13 @@ function TaskCenterPage({
   const [phoneInput, setPhoneInput] = useState('');
   const [libraryTakeCount, setLibraryTakeCount] = useState(0);
   const [taskNotice, setTaskNotice] = useState('');
+  const phoneLineCount = useMemo(() => parsePhoneLines(phoneInput).length, [phoneInput]);
+  const visibleWorkLog = useMemo(() => {
+    if (!activeBatchId) {
+      return workLogEntries;
+    }
+    return workLogEntries.filter((entry) => entry.batchId === activeBatchId);
+  }, [activeBatchId, workLogEntries]);
 
   const fetchTaskList = async (status: 'running' | 'completed', page: number) => {
     if (!authToken) {
@@ -2858,6 +2918,32 @@ function TaskCenterPage({
         </section>
       </section>
 
+      <section className="panel task-panel task-work-log-panel">
+        <div className="panel__header compact">
+          <div>
+            <p className="section-kicker">实时识别</p>
+            <h2>工作日志</h2>
+          </div>
+          {batchRunning ? <span className="status-pill status-pill--running">识别中</span> : null}
+        </div>
+        <p className="connector-note task-work-log-hint">
+          {activeBatchId
+            ? `当前批次 ${activeBatchId}，每完成一条号码识别即追加一行。`
+            : '启动任务后，各端口每识别完一条号码会在此显示。'}
+        </p>
+        <div className="task-work-log-scroll" role="log" aria-live="polite">
+          {visibleWorkLog.length ? (
+            visibleWorkLog.map((entry) => (
+              <p key={entry.id} className={`task-work-log-line${entry.hit ? ' task-work-log-line--hit' : ''}`}>
+                {formatWorkLogLine(entry)}
+              </p>
+            ))
+          ) : (
+            <p className="task-work-log-empty">暂无识别记录</p>
+          )}
+        </div>
+      </section>
+
       <section className="panel task-panel">
         <div className="panel__header compact">
           <div>
@@ -2901,101 +2987,127 @@ function TaskCenterPage({
 
       {createModalOpen ? (
         <div className="tutorial-overlay" role="presentation" onClick={() => setCreateModalOpen(false)}>
-          <div className="tutorial-modal task-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
-            <div className="panel__header compact">
+          <div className="tutorial-modal task-modal task-modal--glass" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+            <header className="task-modal__header">
               <div>
                 <p className="section-kicker">新增任务</p>
                 <h2>任务设置</h2>
               </div>
-            </div>
-            <div className="runtime-config-form">
-              <select value={selectedDocId} onChange={(event) => setSelectedDocId(event.target.value)}>
-                <option value="">选择文本（可选）</option>
-                {dataDocs.map((doc) => (
-                  <option key={doc.id} value={doc.id}>
-                    {doc.name}（{doc.rows.length}）
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="connector-note">选择参与任务的端口</div>
-            <div className="action-row">
-              <button className="soft-button" type="button" onClick={() => setSelectedPortIds(ports.map((port) => port.id))}>
-                全选
-              </button>
-              <button className="soft-button" type="button" onClick={() => setSelectedPortIds([])}>
-                全部取消
-              </button>
-            </div>
-            <div className="flow-grid">
-              {ports.map((port) => {
-                const checked = selectedPortIds.includes(port.id);
-                return (
-                  <button
-                    key={`task-port-${port.id}`}
-                    className={checked ? 'flow-chip active' : 'flow-chip'}
-                    type="button"
-                    onClick={() =>
-                      setSelectedPortIds((current) =>
-                        current.includes(port.id) ? current.filter((id) => id !== port.id) : [...current, port.id],
-                      )
-                    }
-                  >
-                    {port.name}
-                  </button>
-                );
-              })}
-            </div>
-            <div className="connector-note">IP分配</div>
-            <div className="runtime-config-form">
-              <select value={ipAssignMode} onChange={(event) => setIpAssignMode(event.target.value as 'auto' | 'manual')}>
-                <option value="auto">自动分配</option>
-                <option value="manual">手动分配</option>
-              </select>
-            </div>
-            {ipAssignMode === 'manual' ? (
-              <div className="runtime-config-form">
-                {selectedPortIds.map((portId) => (
-                  <select
-                    key={`manual-ip-${portId}`}
-                    value={manualIpMap[portId] ?? ''}
-                    onChange={(event) => setManualIpMap((current) => ({ ...current, [portId]: event.target.value }))}
-                  >
-                    <option value="">{portId} 选择IP</option>
-                    {ipPool.map((ip) => (
-                      <option key={`${portId}-${ip.value}`} value={ip.value}>
-                        {ip.value}
-                      </option>
-                    ))}
-                  </select>
-                ))}
-              </div>
-            ) : null}
-            <div className="connector-note">选择要筛选的号码（手填或从号码库提取）</div>
-            <textarea
-              className="batch-input"
-              value={phoneInput}
-              onChange={(event) => setPhoneInput(event.target.value)}
-              placeholder="手动填写号码，一行一个"
-            />
-            <div className="runtime-config-form">
-              <input
-                type="number"
-                min={0}
-                value={libraryTakeCount}
-                onChange={(event) => setLibraryTakeCount(Math.max(0, Number(event.target.value) || 0))}
-                placeholder="从号码库按顺序取号数量"
-              />
-            </div>
-            <div className="action-row">
-              <button className="run-button" type="button" onClick={() => void executeTaskNow()}>
-                立即执行
-              </button>
               <button className="soft-button" type="button" onClick={() => setCreateModalOpen(false)}>
-                取消
+                关闭
               </button>
+            </header>
+            <div className="task-modal__body">
+              <section className="task-glass-section">
+                <label className="task-glass-label" htmlFor="task-doc-select">
+                  选择文本（可选）
+                </label>
+                <select id="task-doc-select" className="task-glass-control" value={selectedDocId} onChange={(event) => setSelectedDocId(event.target.value)}>
+                  <option value="">不选择文本</option>
+                  {dataDocs.map((doc) => (
+                    <option key={doc.id} value={doc.id}>
+                      {doc.name}（{doc.rows.length}）
+                    </option>
+                  ))}
+                </select>
+              </section>
+
+              <section className="task-glass-section">
+                <div className="task-glass-section__head">
+                  <span className="task-glass-label">选择参与任务的端口</span>
+                  <div className="action-row task-glass-actions">
+                    <button className="soft-button" type="button" onClick={() => setSelectedPortIds(ports.map((port) => port.id))}>
+                      全选
+                    </button>
+                    <button className="soft-button" type="button" onClick={() => setSelectedPortIds([])}>
+                      全部取消
+                    </button>
+                  </div>
+                </div>
+                <div className="task-port-grid">
+                  {ports.map((port) => {
+                    const checked = selectedPortIds.includes(port.id);
+                    return (
+                      <button
+                        key={`task-port-${port.id}`}
+                        className={checked ? 'task-port-chip task-port-chip--active' : 'task-port-chip'}
+                        type="button"
+                        onClick={() =>
+                          setSelectedPortIds((current) =>
+                            current.includes(port.id) ? current.filter((id) => id !== port.id) : [...current, port.id],
+                          )
+                        }
+                      >
+                        {port.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section className="task-glass-section">
+                <label className="task-glass-label" htmlFor="task-ip-mode">
+                  IP 分配
+                </label>
+                <select id="task-ip-mode" className="task-glass-control" value={ipAssignMode} onChange={(event) => setIpAssignMode(event.target.value as 'auto' | 'manual')}>
+                  <option value="auto">自动分配</option>
+                  <option value="manual">手动分配</option>
+                </select>
+                {ipAssignMode === 'manual' ? (
+                  <div className="task-glass-stack">
+                    {selectedPortIds.map((portId) => (
+                      <select
+                        key={`manual-ip-${portId}`}
+                        className="task-glass-control"
+                        value={manualIpMap[portId] ?? ''}
+                        onChange={(event) => setManualIpMap((current) => ({ ...current, [portId]: event.target.value }))}
+                      >
+                        <option value="">{portId} 选择 IP</option>
+                        {ipPool.map((ip) => (
+                          <option key={`${portId}-${ip.value}`} value={ip.value}>
+                            {ip.value}
+                          </option>
+                        ))}
+                      </select>
+                    ))}
+                  </div>
+                ) : null}
+              </section>
+
+              <section className="task-glass-section task-glass-section--wide">
+                <label className="task-glass-label" htmlFor="task-phone-input">
+                  筛选号码（手填或从号码库提取）
+                </label>
+                <textarea
+                  id="task-phone-input"
+                  className="task-glass-control task-glass-textarea"
+                  value={phoneInput}
+                  onChange={(event) => setPhoneInput(event.target.value)}
+                  placeholder="手动填写号码，一行一个"
+                />
+                <div className="task-glass-meta-row">
+                  <span className="task-glass-counter">已录入 {phoneLineCount} 条</span>
+                  <input
+                    className="task-glass-control task-glass-control--compact"
+                    type="number"
+                    min={0}
+                    value={libraryTakeCount}
+                    onChange={(event) => setLibraryTakeCount(Math.max(0, Number(event.target.value) || 0))}
+                    placeholder="号码库取号数量"
+                  />
+                </div>
+              </section>
+
+              <div className="task-modal__footer">
+                <button className="run-button" type="button" onClick={() => void executeTaskNow()}>
+                  立即执行
+                </button>
+                <button className="soft-button" type="button" onClick={() => setCreateModalOpen(false)}>
+                  取消
+                </button>
+              </div>
+              {taskNotice ? <p className="task-modal__notice">{taskNotice}</p> : null}
             </div>
-            {taskNotice ? <div className="connector-note">{taskNotice}</div> : null}
           </div>
         </div>
       ) : null}
